@@ -1,0 +1,15 @@
+# Môi trường Python — mỗi máy tự tạo bằng `make setup`
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Sinh bởi công cụ/editor trên máy từng người
+.ruby-lsp/
+.playwright-mcp/
+.vscode/
+.idea/
+
+# Bí mật và cấu hình riêng từng máy
+.env
+.env.*

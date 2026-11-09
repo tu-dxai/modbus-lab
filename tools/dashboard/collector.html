@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modbus lab</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1c2129; --muted: #6b7280; --line: #e5e7eb;
+    --ok: #15803d; --ok-bg: #dcfce7; --warn: #a16207; --warn-bg: #fef3c7;
+    --err: #b91c1c; --err-bg: #fee2e2; --accent: #2563eb; --spark: #94a3b8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1218; --card: #181c24; --text: #e5e7eb; --muted: #9ca3af; --line: #2a303b;
+      --ok: #4ade80; --ok-bg: #14321f; --warn: #fbbf24; --warn-bg: #3a2c0b;
+      --err: #f87171; --err-bg: #3b1515; --accent: #60a5fa; --spark: #64748b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; }
+  header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 16px; }
+  header.top h1 { font-size: 20px; margin: 0; margin-right: auto; }
+  .pill { padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.err { color: var(--err); background: var(--err-bg); }
+  .muted { color: var(--muted); font-size: 13px; }
+  #alerts:empty { display: none; }
+  #alerts { margin-bottom: 16px; padding: 10px 14px; border-radius: 10px; background: var(--err-bg); color: var(--err); }
+  #alerts div + div { margin-top: 4px; }
+  #devices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .card > header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  .card h2 { font-size: 16px; margin: 0; }
+  .row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .row.hot { background: var(--err-bg); }
+  .name { font-weight: 600; }
+  .meta { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
+  .val { text-align: right; white-space: nowrap; min-width: 110px; }
+  .num { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .unit { color: var(--muted); margin-left: 4px; }
+  .row.err .num, .note.err { color: var(--err); }
+  .row.hot .num { color: var(--err); }
+  .note { grid-column: 1 / -1; font-size: 13px; }
+  .note:empty { display: none; }
+  svg.spark { width: 110px; height: 30px; }
+  svg.spark polyline { fill: none; stroke: var(--spark); stroke-width: 1.5; }
+  .row.hot svg.spark polyline { stroke: var(--err); }
+  .ctl { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .ctl .lbl { color: var(--muted); font-size: 13px; margin-right: 4px; }
+  button, input { font: inherit; }
+  button { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: wait; }
+  input[type=number] { width: 110px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+  footer { margin-top: 20px; }
+  a { color: var(--accent); }
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); max-width: calc(100% - 32px);
+           padding: 10px 16px; border-radius: 10px; font-weight: 500; box-shadow: 0 4px 20px rgba(0,0,0,.2); display: none; }
+  #toast.ok { display: block; color: var(--ok); background: var(--ok-bg); }
+  #toast.err { display: block; color: var(--err); background: var(--err-bg); }
+  @media (max-width: 480px) {
+    svg.spark { display: none; }
+    .row { grid-template-columns: 1fr auto; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Modbus lab <span id="site" class="muted"></span></h1>
+    <span id="conn" class="pill warn">Đang tải…</span>
+    <span id="info" class="muted"></span>
+  </header>
+  <div id="alerts"></div>
+  <main id="devices"></main>
+  <footer class="muted">Cập nhật mỗi 2 giây. Lệnh ghi đi qua rào chắn: chỉ điểm và giá trị được phép, đọc lại để xác nhận.
+    JSON: <a href="/api/points">/api/points</a></footer>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const SVG = 'http://www.w3.org/2000/svg';
+let built = '';                       // mô tả thiết bị lần dựng trước; đổi thì dựng lại
+const rows = {};                      // key -> các phần tử cần cập nhật
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+const fmt = (v) => Number(v).toLocaleString('vi-VN', { maximumFractionDigits: 2 });
+
+function rulesText(rules, key) {
+  return rules.filter(a => a.point === key)
+    .map(a => 'above' in a ? `cảnh báo > ${a.above}` : `cảnh báo < ${a.below}`).join(', ');
+}
+
+function build(s) {
+  const main = $('#devices');
+  main.replaceChildren();
+  for (const k in rows) delete rows[k];
+  for (const d of s.devices) {
+    const card = el('section', 'card');
+    const h = el('header');
+    const site = d.site_endpoint !== d.endpoint ? ` (site ${d.site_endpoint})` : '';
+    h.append(el('h2', '', d.name),
+             el('span', 'muted', `${d.endpoint}${site} · device_id ${d.device_id} · byte order ${d.byte_order}`));
+    card.append(h);
+    for (const p of d.points) {
+      const row = el('div', 'row');
+      const info = el('div');
+      const rule = rulesText(s.alert_rules, p.key);
+      info.append(el('div', 'name', p.name),
+                  el('div', 'meta', `${p.table} ${p.address} · ${p.type}${rule ? ' · ' + rule : ''}`));
+      const spark = document.createElementNS(SVG, 'svg');
+      spark.setAttribute('class', 'spark');
+      spark.setAttribute('viewBox', '0 0 110 30');
+      spark.setAttribute('preserveAspectRatio', 'none');
+      const line = document.createElementNS(SVG, 'polyline');
+      spark.append(line);
+      const val = el('div', 'val');
+      const num = el('span', 'num', '—');
+      val.append(num, el('span', 'unit', p.unit));
+      const note = el('div', 'note');
+      row.append(info, spark, val, note);
+      const r = { row, num, note, line, buttons: [] };
+      if (p.writable) row.append(controls(p, r));
+      rows[p.key] = r;
+      card.append(row);
+    }
+    main.append(card);
+  }
+}
+
+function controls(p, r) {
+  const ctl = el('div', 'ctl');
+  ctl.append(el('span', 'lbl', 'Ghi:'));
+  if (p.allowed) {
+    for (const v of p.allowed) {
+      const b = el('button', '', String(v));
+      b.dataset.v = v;
+      b.onclick = () => write(p.key, v, r.buttons);
+      r.buttons.push(b);
+      ctl.append(b);
+    }
+  } else {
+    const inp = el('input');
+    inp.type = 'number'; inp.step = 'any';
+    const b = el('button', '', 'Ghi');
+    b.onclick = () => inp.value !== '' && write(p.key, Number(inp.value), [b]);
+    r.buttons.push(b);
+    ctl.append(inp, b);
+  }
+  return ctl;
+}
+
+function sparkPoints(vals) {
+  const v = vals.filter(x => x !== null);
+  if (v.length < 2) return '';
+  const lo = Math.min(...v), hi = Math.max(...v), span = hi - lo || 1;
+  const step = 110 / (vals.length - 1);
+  return vals.map((x, i) => x === null ? null : `${(i * step).toFixed(1)},${(27 - (x - lo) / span * 24).toFixed(1)}`)
+             .filter(Boolean).join(' ');
+}
+
+function update(s) {
+  const firing = new Map(s.alert_rules.filter(a => a.firing).map(a => [a.point, a]));
+  let ok = 0, total = 0;
+  for (const [key, r] of Object.entries(rows)) {
+    const p = s.points[key];
+    total++;
+    if (p && p.ok) ok++;
+    r.num.textContent = !p ? '—' : p.ok ? fmt(p.value) : 'LỖI';
+    r.row.classList.toggle('err', !!p && !p.ok);
+    r.row.classList.toggle('hot', firing.has(key));
+    if (p && !p.ok) { r.note.textContent = p.error; r.note.className = 'note err'; }
+    else if (firing.has(key)) { r.note.textContent = '⚠ ' + firing.get(key).message; r.note.className = 'note err'; }
+    else r.note.textContent = '';
+    r.line.setAttribute('points', sparkPoints(s.history[key] || []));
+    for (const b of r.buttons) if (b.dataset.v !== undefined)
+      b.classList.toggle('on', !!p && p.ok && Number(b.dataset.v) === p.value);
+  }
+
+  const alerts = $('#alerts');
+  alerts.replaceChildren(...[...firing.values()].map(a =>
+    el('div', '', `⚠ ${a.message} — ${a.point} = ${fmt(s.points[a.point].value)} ${s.points[a.point].unit}`)));
+
+  const conn = $('#conn');
+  if (total && ok === total) { conn.className = 'pill ok'; conn.textContent = 'Đang đọc'; }
+  else if (ok > 0) { conn.className = 'pill warn'; conn.textContent = 'Một số điểm lỗi'; }
+  else { conn.className = 'pill err'; conn.textContent = s.status.round ? 'Mất kết nối thiết bị' : 'Chờ lượt đọc đầu'; }
+  $('#site').textContent = s.site ? `${s.site} · môi trường ${s.env}` : '';
+  $('#info').textContent = s.status.round ? `Lượt ${s.status.round} · lúc ${s.status.at} · ${ok}/${total} điểm đọc được` : '';
+}
+
+async function load() {
+  try {
+    const res = await fetch('/api/points', { cache: 'no-store' });
+    const s = await res.json();
+    const shape = JSON.stringify([s.devices, s.alert_rules.map(a => [a.point, a.above, a.below])]);
+    if (shape !== built) { build(s); built = shape; }
+    update(s);
+  } catch (e) {
+    const conn = $('#conn');
+    conn.className = 'pill err';
+    conn.textContent = 'Không gọi được collector';
+  }
+  setTimeout(load, 2000);
+}
+
+let toastTimer;
+function toast(msg, kind) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = kind;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 5000);
+}
+
+async function write(key, value, buttons) {
+  if (!confirm(`Ghi ${key} = ${value}?`)) return;
+  buttons.forEach(b => b.disabled = true);
+  try {
+    const res = await fetch('/api/write', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ point: key, value }),
+    });
+    const j = await res.json();
+    if (j.ok) toast(`Đã ghi ${key}: ${fmt(j.before)} → ${fmt(j.after)} (đã đọc lại xác nhận)`, 'ok');
+    else toast((j.blocked ? 'Rào chắn từ chối: ' : 'Lỗi: ') + j.error, 'err');
+  } catch (e) {
+    toast('Không gọi được collector', 'err');
+  } finally {
+    buttons.forEach(b => b.disabled = false);
+  }
+}
+
+load();
+</script>
+</body>
+</html>

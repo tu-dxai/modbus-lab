@@ -1,0 +1,56 @@
+# =============================================================
+#  POINT MAP — mô tả mọi thiết bị và điểm đo của site
+#  Simulator dùng file này để giả lập; collector và write-service dùng để đọc, ghi.
+#  Thêm thiết bị mới = thêm một khối, không sửa code.
+#
+#  Địa chỉ ở đây là địa chỉ THẬT tại site. Khi chạy lab (mặc định --env lab), từng địa chỉ
+#  được ánh xạ sang simulator theo environments/lab.yml; chỉ --env site mới kết nối địa chỉ thật.
+#
+#  Thiết bị trùng host:port = cùng nằm sau một gateway (Modbus TCP -> RS-485):
+#    - dùng chung một kết nối TCP (nhiều gateway chỉ cho 1-4 kết nối cùng lúc)
+#    - device_id không được trùng trong cùng host:port, và phải trong 1-247 (địa chỉ RTU trên bus)
+#    - timeout phải giống nhau (cùng một đường truyền)
+#
+#  IP 10.20.0.x dưới đây là VÍ DỤ — thay bằng IP thật khi có sơ đồ mạng site.
+# =============================================================
+site: container-01
+
+devices:
+  - name: dong-ho-dien-01          # đồng hồ điện tủ phân phối, sau gateway RS-485
+    host: 10.20.0.21               # IP của gateway (thiết bị RS-485 không có IP riêng)
+    port: 502                      # cổng chuẩn Modbus TCP
+    device_id: 1                   # địa chỉ RTU trên bus — tra màn hình cài đặt thiết bị
+    byte_order: ABCD               # tra tài liệu hãng, KHÔNG đoán
+    timeout: 3                     # giây; thiết bị thật chậm hơn simulator
+    points:
+      - { name: dien_ap,     table: holding, address: 0, type: uint16,  scale: 0.1, unit: "V",  sim: { base: 230.0, noise: 1.5 } }
+      - { name: dong_dien,   table: holding, address: 1, type: uint16,  scale: 0.1, unit: "A",  sim: { base: 12.0,  noise: 0.8 } }
+      - { name: cong_suat,   table: holding, address: 2, type: float32, scale: 1,   unit: "W",  sim: { base: 2800,  noise: 60 } }
+      - { name: nhiet_do_tu, table: holding, address: 4, type: int16,   scale: 0.1, unit: "°C", sim: { base: 26.0,  noise: 0.3, drift: 0.4 } }
+
+  - name: dong-ho-dien-02          # đồng hồ điện thứ hai, cùng bus RS-485 với dong-ho-dien-01
+    host: 10.20.0.21
+    port: 502
+    device_id: 2
+    byte_order: ABCD
+    timeout: 3
+    points:
+      - { name: dien_ap,     table: holding, address: 0, type: uint16,  scale: 0.1, unit: "V",  sim: { base: 229.0, noise: 1.5 } }
+      - { name: dong_dien,   table: holding, address: 1, type: uint16,  scale: 0.1, unit: "A",  sim: { base: 8.5,   noise: 0.6 } }
+      - { name: cong_suat,   table: holding, address: 2, type: float32, scale: 1,   unit: "W",  sim: { base: 1950,  noise: 45 } }
+      - { name: nhiet_do_tu, table: holding, address: 4, type: int16,   scale: 0.1, unit: "°C", sim: { base: 25.0,  noise: 0.3 } }
+
+  - name: bess-01                  # pin lưu trữ, có cổng Ethernet riêng; hãng này đảo thứ tự word
+    host: 10.20.0.30
+    port: 502
+    device_id: 1                   # thiết bị TCP trực tiếp thường dùng 1 (hoặc 255)
+    byte_order: CDAB
+    timeout: 3
+    points:
+      - { name: muc_pin,      table: input,   address: 100, type: float32, scale: 1,   unit: "%",  sim: { base: 80.0, noise: 0.2 } }
+      - { name: nhiet_do_pin, table: input,   address: 104, type: int16,   scale: 0.1, unit: "°C", sim: { base: -2.0, noise: 0.4 } }
+      - { name: che_do,       table: holding, address: 10,  type: uint16,  scale: 1,   unit: "",   writable: true, allowed: [0, 1], sim: { base: 0 } }
+
+alerts:
+  - { point: dong-ho-dien-01.nhiet_do_tu, above: 30.0, message: "Tủ điện quá nóng" }
+  - { point: bess-01.muc_pin, below: 20.0, message: "Pin sắp cạn" }

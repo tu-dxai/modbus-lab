@@ -1,0 +1,12 @@
+# =============================================================
+#  MÔI TRƯỜNG LAB — ánh xạ địa chỉ thật trong Point Map sang simulator trên máy này
+#
+#  Mỗi địa chỉ thật (một gateway hoặc một thiết bị TCP) cần đúng một dòng; mọi thiết bị
+#  sau cùng gateway đi theo dòng đó. Mỗi địa chỉ một IP loopback riêng, cùng cổng — giống
+#  site thật (mỗi gateway/thiết bị một IP). Linux dùng được cả dải 127.x.x.x không cần cấu hình.
+#
+#  Chạy với môi trường này: mặc định (--env lab). Kết nối thiết bị thật: --env site.
+# =============================================================
+addresses:
+  "10.20.0.21:502": "127.0.1.21:5020"    # gateway điện: dong-ho-dien-01, dong-ho-dien-02
+  "10.20.0.30:502": "127.0.1.30:5020"    # bess-01
