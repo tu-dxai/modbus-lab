@@ -9,11 +9,16 @@
   GET    /api/writes       nhật ký lệnh ghi Modbus; lọc bằng ?point=...&since=<seq>
   DELETE /api/writes       xóa nhật ký
   POST   /api/reset        về giá trị khởi đầu và xóa nhật ký
+  GET    /i18n.json        từ điển song ngữ vi/ja cho trang điều khiển
+  GET    /i18n.js          mã song ngữ dùng chung (i18n/i18n.js)
+
+Lỗi trả về gồm error (tiếng Việt), code và params (để trang web dịch theo ngôn ngữ người dùng).
 """
 import json, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from i18n import SCRIPT, ApiError, by_language
 from sim_state import BadValue, SimState, UnknownPoint
 
 PAGE = Path(__file__).with_name("control.html")
@@ -36,12 +41,16 @@ class Control(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def not_found(self) -> None:
-        self.reply(404, {"ok": False, "error": "không có đường dẫn này"})
+        self.reply(404, {"ok": False, **ApiError("api.not_found").as_json()})
 
     def do_GET(self):
         url = urlparse(self.path)
         if url.path in ("/", "/index.html"):
             self.reply(200, PAGE.read_bytes(), "text/html; charset=utf-8")
+        elif url.path == "/i18n.json":
+            self.reply(200, by_language())
+        elif url.path == "/i18n.js":
+            self.reply(200, SCRIPT.read_bytes(), "text/javascript; charset=utf-8")
         elif url.path == "/api/state":
             self.reply(200, {"points": self.state.snapshot()})
         elif url.path == "/api/writes":
@@ -49,7 +58,7 @@ class Control(BaseHTTPRequestHandler):
             try:
                 since = int(q["since"][0]) if "since" in q else None
             except ValueError:
-                return self.reply(400, {"ok": False, "error": "since phải là số nguyên"})
+                return self.reply(400, {"ok": False, **ApiError("api.bad_since").as_json()})
             point = q["point"][0] if "point" in q else None
             self.reply(200, {"writes": self.state.writes(point, since)})
         else:
@@ -67,13 +76,13 @@ class Control(BaseHTTPRequestHandler):
             if not isinstance(values, dict) or not values:
                 raise ValueError
         except ValueError:
-            return self.reply(400, {"ok": False, "error": 'cần JSON dạng {"thiết-bị.điểm": giá trị, ...}'})
+            return self.reply(400, {"ok": False, **ApiError("api.bad_state_request").as_json()})
         try:
             changed = self.state.set_many(values)
         except UnknownPoint as e:
-            return self.reply(404, {"ok": False, "error": str(e)})
+            return self.reply(404, {"ok": False, **e.as_json()})
         except BadValue as e:
-            return self.reply(400, {"ok": False, "error": str(e)})
+            return self.reply(400, {"ok": False, **e.as_json()})
         print(f"  << Đặt giá trị: {', '.join(f'{k} = {v}' for k, v in changed.items())}")
         self.reply(200, {"ok": True, "points": changed})
 

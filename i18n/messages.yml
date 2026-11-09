@@ -1,0 +1,109 @@
+# =============================================================
+#  TỪ ĐIỂN SONG NGỮ vi / ja — mọi chữ trên hai trang web và mọi thông báo lỗi trang web hiển thị
+#
+#  - Mỗi khóa có đủ vi và ja; {tên} là chỗ điền giá trị, hai ngôn ngữ phải dùng cùng các {tên}.
+#    `make test` kiểm tra cả hai điều này, và kiểm tra mọi khóa trang web/code dùng đều có ở đây.
+#  - Nhãn thiết bị, điểm đo và câu cảnh báo nằm trong Point Map (edge/point-map/devices.yml).
+#  - `make i18n-export` xuất toàn bộ cặp vi/ja (từ điển + Point Map) ra bảng TSV để duyệt.
+#
+#  Bản tiếng Nhật CẦN NGƯỜI NHẬT DUYỆT trước khi dùng chính thức. Thuật ngữ cần xác nhận:
+#    rào chắn (lớp chặn lệnh ghi)  -> ガード           thay thế khả dĩ: 書き込みガード / インターロック
+#    điểm đo (point)               -> 計測点           thay thế khả dĩ: ポイント / 監視点
+#    nhật ký lệnh ghi              -> 書き込みログ
+#    holding register              -> 保持レジスタ
+#    mã lỗi Modbus (exception)     -> 例外コード
+#    đọc lại xác nhận              -> 読み戻し確認
+#    simulator / collector         -> シミュレーター / コレクター
+#    môi trường lab / site         -> 環境 lab / site (giữ nguyên tên môi trường)
+# =============================================================
+
+# ---------- chung cho hai trang ----------
+common.device_meta:      { vi: "{endpoint}{site} · device_id {id} · byte order {order}",
+                           ja: "{endpoint}{site} · device_id {id} · バイト順 {order}" }
+common.error:            { vi: "LỖI",                ja: "エラー" }
+
+# ---------- trang collector (tools/dashboard) ----------
+dash.title:              { vi: "Bảng số liệu Modbus", ja: "Modbus 計測値モニター" }
+dash.site:               { vi: "{site} · môi trường {env}", ja: "{site} · 環境 {env}" }
+dash.site_suffix:        { vi: " (địa chỉ site {site})", ja: "（現地アドレス {site}）" }
+dash.loading:            { vi: "Đang tải…",          ja: "読み込み中…" }
+dash.status_ok:          { vi: "Đang đọc",           ja: "取得中" }
+dash.status_partial:     { vi: "Một số điểm lỗi",    ja: "一部の計測点でエラー" }
+dash.status_down:        { vi: "Mất kết nối thiết bị", ja: "機器と通信できません" }
+dash.status_waiting:     { vi: "Chờ lượt đọc đầu tiên", ja: "初回の読み取り待ち" }
+dash.status_no_collector: { vi: "Không kết nối được collector", ja: "コレクターに接続できません" }
+dash.round:              { vi: "Lượt {round} · lúc {at} · đọc được {ok}/{total} điểm",
+                           ja: "第{round}回 · {at} · {total}点中{ok}点を取得" }
+dash.threshold_above:    { vi: "cảnh báo khi > {value}", ja: "{value} 超で警報" }
+dash.threshold_below:    { vi: "cảnh báo khi < {value}", ja: "{value} 未満で警報" }
+dash.write_label:        { vi: "Ghi:",               ja: "書き込み:" }
+dash.write_button:       { vi: "Ghi",                ja: "書き込み" }
+dash.confirm_write:      { vi: "Ghi {point} = {value}?", ja: "{point} に {value} を書き込みますか？" }
+dash.write_ok:           { vi: "Đã ghi {point}: {before} → {after} (đã đọc lại xác nhận)",
+                           ja: "{point} に書き込みました：{before} → {after}（読み戻し確認済み）" }
+dash.blocked:            { vi: "Rào chắn từ chối: {reason}", ja: "ガードにより拒否：{reason}" }
+dash.failed:             { vi: "Lỗi: {reason}",      ja: "エラー：{reason}" }
+dash.footer:             { vi: "Cập nhật mỗi 2 giây. Lệnh ghi đi qua rào chắn: chỉ điểm và giá trị được phép, ghi xong đọc lại để xác nhận.",
+                           ja: "2秒ごとに更新します。書き込みはガードを経由し、許可された計測点と値のみ受け付け、書き込み後に読み戻して確認します。" }
+
+# ---------- trang điều khiển simulator (tools/simulator) ----------
+simui.title:             { vi: "Simulator thiết bị", ja: "機器シミュレーター" }
+simui.lead:              { vi: "Đặt giá trị cho thiết bị giả ở cột trái; client đọc qua Modbus sẽ thấy đúng giá trị đó. Mọi lệnh ghi client gửi tới hiện ở cột phải, kể cả lệnh bị thiết bị từ chối.",
+                           ja: "左側で模擬機器の値を設定します。Modbus で読み取るクライアントには、その値がそのまま見えます。クライアントから届いた書き込みは、機器が拒否したものも含めて右側に表示されます。" }
+simui.site_suffix:       { vi: " (giả lập {site})",  ja: "（{site} を模擬）" }
+simui.connecting:        { vi: "Đang kết nối",       ja: "接続中" }
+simui.running:           { vi: "Đang chạy",          ja: "稼働中" }
+simui.down:              { vi: "Mất kết nối simulator", ja: "シミュレーターに接続できません" }
+simui.reset:             { vi: "Đặt lại tất cả",     ja: "すべて初期化" }
+simui.reset_hint:        { vi: "Về giá trị khởi đầu trong Point Map và xóa nhật ký", ja: "Point Map の初期値に戻し、ログを消去します" }
+simui.confirm_reset:     { vi: "Đặt lại mọi giá trị về khởi đầu và xóa nhật ký lệnh ghi?",
+                           ja: "すべての値を初期値に戻し、書き込みログを消去しますか？" }
+simui.writable:          { vi: "client ghi được",    ja: "クライアント書き込み可" }
+simui.allowed:           { vi: "cho phép {values}",  ja: "許可値 {values}" }
+simui.range:             { vi: "khoảng {min}…{max}", ja: "範囲 {min}～{max}" }
+simui.new_value:         { vi: "giá trị mới",        ja: "新しい値" }
+simui.set:               { vi: "Đặt",                ja: "設定" }
+simui.log_title:         { vi: "Lệnh ghi từ client", ja: "クライアントからの書き込み" }
+simui.log_count:         { vi: "{n} lệnh",           ja: "{n} 件" }
+simui.clear:             { vi: "Xóa nhật ký",        ja: "ログを消去" }
+simui.empty:             { vi: "Chưa có lệnh ghi nào.", ja: "書き込みはまだありません。" }
+simui.accepted:          { vi: "ĐÃ NHẬN",            ja: "受理" }
+simui.rejected:          { vi: "TỪ CHỐI · mã {code}", ja: "拒否 · コード {code}" }
+simui.unknown_device:    { vi: "device_id {id} không tồn tại", ja: "device_id {id} は存在しません" }
+simui.target:            { vi: "tới {endpoint}",     ja: "宛先 {endpoint}" }
+simui.no_point:          { vi: "không trúng điểm nào trong Point Map", ja: "Point Map のどの計測点にも該当しません" }
+simui.attempt:           { vi: "{name}: định ghi {value} (vẫn giữ {before})",
+                           ja: "{name}：{value} を書き込もうとしました（{before} のまま）" }
+simui.raw:               { vi: "FC{fc} · ô {address} · thanh ghi [{registers}]",
+                           ja: "FC{fc} · アドレス {address} · レジスタ [{registers}]" }
+
+# ---------- lỗi rào chắn ghi (edge/write-service) ----------
+write.unknown_point:     { vi: "không có điểm '{key}' trong Point Map", ja: "計測点 '{key}' は Point Map にありません" }
+write.not_writable:      { vi: "'{key}' không được phép ghi", ja: "'{key}' は書き込みが許可されていません" }
+write.no_limits:         { vi: "'{key}' chưa khai báo allowed hoặc khoảng min/max trong Point Map",
+                           ja: "'{key}' には Point Map で allowed または min/max の範囲が定義されていません" }
+write.not_allowed:       { vi: "giá trị {value} không thuộc các giá trị cho phép ({allowed})",
+                           ja: "値 {value} は許可値（{allowed}）に含まれていません" }
+write.out_of_range:      { vi: "giá trị {value} nằm ngoài khoảng cho phép [{min}, {max}]",
+                           ja: "値 {value} は許可範囲 [{min}, {max}] の外です" }
+write.not_holding:       { vi: "chỉ ghi được vào holding register", ja: "書き込みできるのは保持レジスタ（holding register）のみです" }
+write.device_rejected:   { vi: "thiết bị từ chối lệnh ghi, mã lỗi {code}", ja: "機器が書き込みを拒否しました（例外コード {code}）" }
+write.readback_mismatch: { vi: "đọc lại được {after}, không khớp giá trị vừa ghi {value}",
+                           ja: "読み戻し値 {after} が書き込んだ値 {value} と一致しません" }
+
+# ---------- lỗi đọc (edge/modbus) ----------
+read.modbus_exception:   { vi: "mã lỗi Modbus {code}", ja: "Modbus 例外コード {code}" }
+read.unreachable:        { vi: "không kết nối được {endpoint}", ja: "{endpoint} に接続できません" }
+read.failed:             { vi: "không đọc được: {detail}", ja: "読み取りに失敗しました：{detail}" }
+
+# ---------- lỗi kênh điều khiển simulator ----------
+sim.unknown_points:      { vi: "không có điểm {keys} trong Point Map", ja: "計測点 {keys} は Point Map にありません" }
+sim.bad_value:           { vi: "{key}: giá trị {value} không vừa kiểu {type} với hệ số {scale}",
+                           ja: "{key}：値 {value} は型 {type}（係数 {scale}）に収まりません" }
+
+# ---------- lỗi API chung ----------
+api.not_found:           { vi: "không có đường dẫn này", ja: "このパスは存在しません" }
+api.bad_write_request:   { vi: "yêu cầu cần JSON gồm point (tên điểm) và value (số)",
+                           ja: "point（計測点名）と value（数値）を含む JSON が必要です" }
+api.bad_state_request:   { vi: "yêu cầu cần JSON dạng tên điểm: giá trị", ja: "「計測点名: 値」形式の JSON が必要です" }
+api.bad_since:           { vi: "since phải là số nguyên", ja: "since は整数で指定してください" }

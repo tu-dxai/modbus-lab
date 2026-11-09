@@ -19,7 +19,9 @@
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+               "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif; }
   .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 40px; }
   header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 6px; }
   header.top h1 { font-size: 20px; margin: 0; margin-right: auto; }
@@ -62,31 +64,42 @@
   .w .raw { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
   .empty { padding: 20px 16px; color: var(--muted); }
   .actions { display: flex; gap: 8px; margin-left: auto; }
+  .langs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .langs button { border: 0; border-radius: 0; padding: 5px 10px; font-size: 13px; }
+  .langs button + button { border-left: 1px solid var(--line); }
+  .langs button.on { background: var(--accent); color: #fff; }
+  .card > header .meta { flex-basis: 100%; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="top">
-    <h1>Simulator thiết bị</h1>
-    <span id="conn" class="pill ok">Đang kết nối</span>
-    <div class="actions"><button id="reset" title="Về giá trị khởi đầu trong Point Map và xóa nhật ký">Đặt lại tất cả</button></div>
+    <h1 data-i18n="simui.title">Simulator</h1>
+    <span id="conn" class="pill ok" data-i18n="simui.connecting"></span>
+    <div class="actions">
+      <div class="langs"><button data-lang="vi">Tiếng Việt</button><button data-lang="ja">日本語</button></div>
+      <button id="reset" data-i18n="simui.reset" data-i18n-title="simui.reset_hint"></button>
+    </div>
   </header>
-  <p class="lead">Đặt giá trị cho thiết bị giả bên trái. Client đọc qua Modbus sẽ thấy đúng giá trị đó.
-    Mọi lệnh ghi client gửi tới hiện bên phải, kể cả lệnh bị thiết bị từ chối.</p>
+  <p class="lead" data-i18n="simui.lead"></p>
   <div class="layout">
     <main id="devices"></main>
     <section class="card">
-      <header><h2>Lệnh ghi từ client</h2><span id="count" class="muted"></span>
-        <div class="actions"><button id="clear">Xóa nhật ký</button></div></header>
-      <div id="log" class="log"><div class="empty">Chưa có lệnh ghi nào.</div></div>
+      <header><h2 data-i18n="simui.log_title"></h2><span id="count" class="muted"></span>
+        <div class="actions"><button id="clear" data-i18n="simui.clear"></button></div></header>
+      <div id="log" class="log"></div>
     </section>
   </div>
 </div>
 
+<script src="/i18n.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
 const rows = {};                         // điểm -> phần tử cần cập nhật
+const labels = {};                       // điểm -> nhãn song ngữ, để hiện trong nhật ký lệnh ghi
+const deviceLabels = {};                 // thiết bị -> nhãn song ngữ
 let built = '';
+let lastPoints = null, lastWrites = null, connState = ['ok', 'simui.connecting'];
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -99,14 +112,18 @@ async function api(method, path, body) {
   const res = await fetch(path, { method, cache: 'no-store',
     headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) });
   const j = await res.json();
-  if (!res.ok) throw new Error(j.error || res.status);
+  if (!res.ok) throw new Error(errText(j) || res.status);
   return j;
 }
 
 function limits(p) {
-  if (p.allowed) return `cho phép ${p.allowed.join(', ')}`;
-  if ('min' in p) return `khoảng ${p.min}…${p.max}`;
+  if (p.allowed) return t('simui.allowed', { values: p.allowed });
+  if ('min' in p) return t('simui.range', { min: p.min, max: p.max });
   return '';
+}
+
+function pointName(key) {
+  return tr(labels[key]) || key.split('.').slice(1).join('.');
 }
 
 function build(points) {
@@ -116,25 +133,29 @@ function build(points) {
   for (const [key, p] of Object.entries(points)) (byDevice[p.device] ||= []).push([key, p]);
   for (const [dev, list] of Object.entries(byDevice)) {
     const first = list[0][1];
+    deviceLabels[dev] = first.device_label;
     const card = el('section', 'card');
     const h = el('header');
-    const site = first.site_endpoint !== first.endpoint ? ` (giả cho ${first.site_endpoint})` : '';
-    h.append(el('h2', '', dev),
-             el('span', 'muted', `${first.endpoint}${site} · device_id ${first.device_id} · byte order ${first.byte_order}`));
+    const site = first.site_endpoint !== first.endpoint ? t('simui.site_suffix', { site: first.site_endpoint }) : '';
+    h.append(el('h2', '', tr(first.device_label) || dev),
+             el('div', 'meta', `${dev} · ` + t('common.device_meta',
+               { endpoint: first.endpoint, site, id: first.device_id, order: first.byte_order })));
     card.append(h);
     for (const [key, p] of list) {
+      labels[key] = p.label;
       const row = el('div', 'row');
       const info = el('div');
-      const name = el('div', 'name', key.split('.').slice(1).join('.'));
-      if (p.writable) name.append(el('span', 'tag', 'client ghi được'));
+      const name = el('div', 'name', tr(p.label));
+      if (p.writable) name.append(el('span', 'tag', t('simui.writable')));
       const lim = limits(p);
-      info.append(name, el('div', 'meta', `${p.table} ${p.address} · ${p.type}${lim ? ' · ' + lim : ''}`));
+      const code = key.split('.').slice(1).join('.');
+      info.append(name, el('div', 'meta', `${code} · ${p.table} ${p.address} · ${p.type}${lim ? ' · ' + lim : ''}`));
       const set = el('div', 'set');
       const now = el('span', 'now', '—');
       const unit = el('span', 'unit', p.unit);
       const inp = el('input');
-      inp.type = 'number'; inp.step = 'any'; inp.placeholder = 'giá trị mới';
-      const btn = el('button', 'primary', 'Đặt');
+      inp.type = 'number'; inp.step = 'any'; inp.placeholder = t('simui.new_value');
+      const btn = el('button', 'primary', t('simui.set'));
       const msg = el('div', 'err-msg');
       const go = () => setValue(key, inp, msg);
       btn.onclick = go;
@@ -148,7 +169,7 @@ function build(points) {
   }
 }
 
-const fmt = (v) => v === null || v === undefined ? '?' : Number(v).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
+const fmt = (v) => v === null || v === undefined ? '?' : Number(v).toLocaleString(locale(), { maximumFractionDigits: 3 });
 
 async function setValue(key, inp, msg) {
   if (inp.value === '') return;
@@ -174,52 +195,72 @@ function update(points) {
 }
 
 function renderLog(writes) {
-  $('#count').textContent = writes.length ? `${writes.length} lệnh` : '';
+  $('#count').textContent = writes.length ? t('simui.log_count', { n: writes.length }) : '';
   const log = $('#log');
-  if (!writes.length) { log.replaceChildren(el('div', 'empty', 'Chưa có lệnh ghi nào.')); return; }
+  if (!writes.length) { log.replaceChildren(el('div', 'empty', t('simui.empty'))); return; }
   log.replaceChildren(...writes.slice().reverse().map(w => {
     const box = el('div', 'w');
     const head = el('div', 'head');
     head.append(el('span', 'seq', `#${w.seq} · ${w.at.slice(11)}`),
-                el('span', 'st ' + (w.accepted ? 'ok' : 'err'), w.accepted ? 'NHẬN' : `TỪ CHỐI · mã ${w.exception}`),
-                el('span', '', w.device ?? `device_id ${w.device_id} không tồn tại`),
-                el('span', 'seq', `tại ${w.site_endpoint}`));
+                el('span', 'st ' + (w.accepted ? 'ok' : 'err'),
+                   w.accepted ? t('simui.accepted') : t('simui.rejected', { code: w.exception })),
+                el('span', '', w.device ? (tr(deviceLabels[w.device]) || w.device)
+                                        : t('simui.unknown_device', { id: w.device_id })),
+                el('span', 'seq', t('simui.target', { endpoint: w.site_endpoint })));
     const pts = el('div', 'pts', w.points.length
-      ? w.points.map(p => {
-          const name = p.key.split('.').slice(1).join('.');
-          return w.accepted ? `${name}: ${fmt(p.before)} → ${fmt(p.value)}`
-                            : `${name}: định ghi ${fmt(p.value)} (vẫn giữ ${fmt(p.before)})`;
-        }).join(' · ')
-      : 'không trúng điểm nào trong Point Map');
-    const raw = el('div', 'raw', `FC${String(w.function).padStart(2, '0')} · ô ${w.address} · thanh ghi [${w.registers.join(', ')}]`);
+      ? w.points.map(p => w.accepted
+          ? `${pointName(p.key)}: ${fmt(p.before)} → ${fmt(p.value)}`
+          : t('simui.attempt', { name: pointName(p.key), value: fmt(p.value), before: fmt(p.before) })).join(' · ')
+      : t('simui.no_point'));
+    const raw = el('div', 'raw', t('simui.raw',
+      { fc: String(w.function).padStart(2, '0'), address: w.address, registers: w.registers }));
     box.append(head, pts, raw);
     return box;
   }));
 }
 
+function setConn(kind, key) {
+  connState = [kind, key];
+  $('#conn').className = 'pill ' + kind;
+  $('#conn').textContent = t(key);
+}
+
 let lastLog = '';
+function render(force) {
+  if (!lastPoints) return;
+  const shape = JSON.stringify([I18N.lang, Object.keys(lastPoints)]);
+  if (shape !== built) { build(lastPoints); built = shape; }
+  update(lastPoints);
+  const sig = JSON.stringify([I18N.lang, lastWrites.map(w => w.seq)]);
+  if (force || sig !== lastLog) { renderLog(lastWrites); lastLog = sig; }
+}
+
 async function refresh() {
   try {
     const [{ points }, { writes }] = await Promise.all([api('GET', '/api/state'), api('GET', '/api/writes')]);
-    const shape = JSON.stringify(Object.keys(points));
-    if (shape !== built) { build(points); built = shape; }
-    update(points);
-    const sig = JSON.stringify(writes.map(w => w.seq));
-    if (sig !== lastLog) { renderLog(writes); lastLog = sig; }
-    $('#conn').className = 'pill ok'; $('#conn').textContent = 'Đang chạy';
+    lastPoints = points; lastWrites = writes;
+    render();
+    setConn('ok', 'simui.running');
   } catch (e) {
-    $('#conn').className = 'pill err'; $('#conn').textContent = 'Mất kết nối simulator';
+    setConn('err', 'simui.down');
   }
 }
 
 $('#reset').onclick = async () => {
-  if (!confirm('Đặt lại mọi giá trị về khởi đầu và xóa nhật ký lệnh ghi?')) return;
+  if (!confirm(t('simui.confirm_reset'))) return;
   await api('POST', '/api/reset', {}); refresh();
 };
 $('#clear').onclick = async () => { await api('DELETE', '/api/writes'); refresh(); };
 
-refresh();
-setInterval(refresh, 1000);
+initI18n(() => {
+  document.title = t('simui.title');
+  setConn(...connState);
+  render(true);
+}).then(() => {
+  document.title = t('simui.title');
+  refresh();
+  setInterval(refresh, 1000);
+});
 </script>
 </body>
 </html>

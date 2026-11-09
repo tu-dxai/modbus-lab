@@ -1,25 +1,34 @@
 PY = .venv/bin/python
-# Các module import nhau theo tên ngắn (codec, sim, collector, write, point_map, modbus_io); khai báo nơi tìm ở đây.
+# Các module import nhau theo tên ngắn (codec, sim, collector, write, point_map, modbus_io, i18n); khai báo nơi tìm ở đây.
 # pytest.ini giữ cùng danh sách này.
-export PYTHONPATH := tools/codec:tools/simulator:tools/dashboard:edge/write-service:edge/point-map:edge/modbus
+export PYTHONPATH := tools/codec:tools/simulator:tools/dashboard:edge/write-service:edge/point-map:edge/modbus:i18n
 
-.PHONY: help setup setup-uv sim set get writes reset collect once write test
+.PHONY: help setup setup-uv sim set get writes reset collect once write test i18n-export
 
 help:
-	@echo "make setup      cai thu vien (can Python >= 3.10)"
-	@echo "make setup-uv   cai bang uv, tu tai Python 3.12"
-	@echo "make sim        chay simulator (gia tri dung yen), dieu khien tai http://localhost:5080"
-	@echo "                ARGS=--noise de them nhieu va do troi"
-	@echo "make set P=dong-ho-dien-01.dien_ap V=231.5   dat gia tri thiet bi gia"
-	@echo "make get [P=...]                             xem gia tri hien tai cua simulator"
-	@echo "make writes [P=...]                          xem cac lenh ghi client da gui"
-	@echo "make reset                                   ve gia tri khoi dau, xoa nhat ky"
-	@echo "make collect    chay collector, xem tai http://localhost:8080"
-	@echo "make once       doc mot luot roi thoat"
-	@echo "make write P=bess-01.che_do V=1   ghi qua rao chan"
-	@echo "make test       chay kiem thu tu dong"
-	@echo "Them tham so cho sim/collect/once qua ARGS, vd: make collect ARGS=\"--web-port 8090\""
-	@echo "Simulator o dia chi khac: SIM_URL=http://host:5080 make set ..."
+	@echo "Cài đặt"
+	@echo "  make setup         cài thư viện vào .venv (cần Python 3.10 trở lên)"
+	@echo "  make setup-uv      cài bằng uv, tự tải Python 3.12 riêng cho dự án"
+	@echo ""
+	@echo "Simulator (thiết bị giả)"
+	@echo "  make sim           chạy simulator, giá trị đứng yên; trang điều khiển http://localhost:5080"
+	@echo "                     ARGS=--noise để thêm nhiễu và độ trôi"
+	@echo "  make set P=dong-ho-dien-01.dien_ap V=231.5   đặt giá trị cho thiết bị giả"
+	@echo "  make get [P=...]   xem giá trị hiện tại của simulator"
+	@echo "  make writes [P=...]  xem các lệnh ghi client đã gửi tới"
+	@echo "  make reset         về giá trị khởi đầu, xóa nhật ký lệnh ghi"
+	@echo "  Simulator ở địa chỉ khác: SIM_URL=http://host:5080 make set ..."
+	@echo ""
+	@echo "Đọc và ghi (mặc định môi trường lab; ARGS=\"--env site\" để dùng thiết bị thật)"
+	@echo "  make collect       chạy collector, trang xem số liệu http://localhost:8080"
+	@echo "  make once          đọc một lượt rồi thoát"
+	@echo "  make write P=bess-01.che_do V=1   ghi qua rào chắn, đọc lại xác nhận"
+	@echo ""
+	@echo "Kiểm thử và bản dịch"
+	@echo "  make test          chạy kiểm thử tự động"
+	@echo "  make i18n-export   xuất mọi cặp vi/ja ra bảng TSV để người duyệt bản dịch"
+	@echo ""
+	@echo "Thêm tham số cho sim/collect/once/write qua ARGS, ví dụ: make collect ARGS=\"--web-port 8090\""
 
 setup:
 	python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
@@ -53,3 +62,6 @@ write:
 
 test:
 	.venv/bin/pytest -v
+
+i18n-export:
+	$(PY) i18n/export.py

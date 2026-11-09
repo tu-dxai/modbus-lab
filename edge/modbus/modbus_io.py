@@ -5,8 +5,13 @@ và dùng chung MỘT kết nối TCP: nhiều gateway thật chỉ cho 1-4 kế
 """
 from pymodbus.client import ModbusTcpClient
 from codec import SIZE, decode
+from i18n import Translatable
 
 DEFAULT_TIMEOUT = 3.0                              # giây; thiết bị thật chậm hơn simulator
+
+
+class ReadError(Translatable):
+    """Thiết bị trả mã lỗi Modbus (exception response) cho lệnh đọc."""
 
 
 def address(d: dict) -> str:
@@ -17,7 +22,7 @@ def read_point(c: ModbusTcpClient, d: dict, p: dict) -> float:
     fn = c.read_holding_registers if p["table"] == "holding" else c.read_input_registers
     r = fn(p["address"], count=SIZE[p["type"]], device_id=d["device_id"])
     if r.isError():
-        raise RuntimeError(f"mã lỗi Modbus {getattr(r, 'exception_code', '?')}")
+        raise ReadError("read.modbus_exception", code=getattr(r, "exception_code", "?"))
     return decode(r.registers, p["type"], d["byte_order"], p.get("scale", 1))
 
 

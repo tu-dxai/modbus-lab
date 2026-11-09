@@ -7,6 +7,7 @@ Lệnh ghi đi tới đúng địa chỉ host:port và device_id của thiết b
 """
 import argparse, logging, sys, warnings
 from codec import encode
+from i18n import Translatable
 from modbus_io import Connections
 from point_map import DEFAULT_PATH, load_or_exit
 
@@ -14,8 +15,12 @@ warnings.filterwarnings("ignore")
 logging.getLogger("pymodbus").setLevel(logging.CRITICAL)
 
 
-class WriteBlocked(Exception):
-    """Lệnh ghi bị rào chắn từ chối."""
+class WriteBlocked(Translatable):
+    """Lệnh ghi bị rào chắn từ chối (chưa gửi gì tới thiết bị)."""
+
+
+class WriteFailed(Translatable):
+    """Lệnh ghi đã gửi nhưng thiết bị từ chối, hoặc đọc lại không khớp."""
 
 
 def find(cfg, key):
@@ -24,29 +29,29 @@ def find(cfg, key):
         for p in d["points"]:
             if d["name"] == dev_name and p["name"] == pt_name:
                 return d, p
-    raise WriteBlocked(f"không có điểm '{key}' trong Point Map")
+    raise WriteBlocked("write.unknown_point", key=key)
 
 
 def write_guarded(cfg, conns, key, value):
     d, p = find(cfg, key)
     if not p.get("writable"):
-        raise WriteBlocked(f"'{key}' không được phép ghi")
+        raise WriteBlocked("write.not_writable", key=key)
     if "allowed" not in p and not ("min" in p and "max" in p):
-        raise WriteBlocked(f"'{key}' thiếu allowed hoặc khoảng min/max trong Point Map")
+        raise WriteBlocked("write.no_limits", key=key)
     if "allowed" in p and value not in p["allowed"]:
-        raise WriteBlocked(f"giá trị {value} không nằm trong danh sách cho phép {p['allowed']}")
+        raise WriteBlocked("write.not_allowed", value=value, allowed=p["allowed"])
     if "min" in p and "max" in p and not p["min"] <= value <= p["max"]:
-        raise WriteBlocked(f"giá trị {value} nằm ngoài khoảng cho phép [{p['min']}, {p['max']}]")
+        raise WriteBlocked("write.out_of_range", value=value, min=p["min"], max=p["max"])
     if p["table"] != "holding":
-        raise WriteBlocked("chỉ ghi được holding register")
+        raise WriteBlocked("write.not_holding")
     before = conns.read(d, p)                         # đọc trạng thái trước khi ghi
     regs = encode(value, p["type"], d["byte_order"], p.get("scale", 1))
     r = conns.client(d).write_registers(p["address"], regs, device_id=d["device_id"])
     if r.isError():
-        raise RuntimeError(f"thiết bị từ chối, mã lỗi {getattr(r, 'exception_code', '?')}")
+        raise WriteFailed("write.device_rejected", code=getattr(r, "exception_code", "?"))
     after = conns.read(d, p)                          # đọc lại để xác nhận
     if after != value:
-        raise RuntimeError(f"đọc lại ra {after}, không khớp giá trị đã ghi {value}")
+        raise WriteFailed("write.readback_mismatch", after=after, value=value)
     return before, after
 
 

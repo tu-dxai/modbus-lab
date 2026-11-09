@@ -35,6 +35,12 @@ def test_web_index_page(web):
     assert code == 200 and "<title>Modbus lab</title>" in html
 
 
+@pytest.mark.parametrize("path", ["/?lang=ja", "/?lang=vi", "/api/points?lang=ja"])
+def test_web_accepts_query_string(web, path):
+    code, _ = call(web + path)
+    assert code == 200
+
+
 def test_web_api_points(cfg, web):
     code, s = call(web + "/api/points")
     assert code == 200
@@ -60,8 +66,30 @@ def test_web_valid_write_and_readback(web):
 def test_web_guard_rejects(web, key, value):
     code, r = call(web + "/api/write", {"point": key, "value": value})
     assert code == 403 and r["blocked"] and not r["ok"]
+    assert r["code"].startswith("write.") and r["error"]          # trang dịch theo code, dòng lệnh dùng error
+
+
+def test_web_blocked_write_returns_code_and_params(web):
+    code, r = call(web + "/api/write", {"point": "bess-01.che_do", "value": 5})
+    assert r["code"] == "write.not_allowed" and r["params"] == {"value": 5.0, "allowed": [0, 1]}
 
 
 def test_web_malformed_request(web):
     code, r = call(web + "/api/write", {"diem": "x"})
-    assert code == 400 and not r["ok"]
+    assert code == 400 and not r["ok"] and r["code"] == "api.bad_write_request"
+
+
+def test_web_serves_dictionary(web):
+    code, d = call(web + "/i18n.json")
+    assert code == 200 and set(d) == {"vi", "ja"}
+    assert d["ja"]["write.not_allowed"] and d["vi"]["write.not_allowed"]
+    req = urllib.request.urlopen(web + "/i18n.js", timeout=3)
+    assert "function initI18n" in req.read().decode() and "javascript" in req.headers["Content-Type"]
+
+
+def test_web_points_carry_bilingual_labels(web):
+    _, s = call(web + "/api/points")
+    bess = next(d for d in s["devices"] if d["name"] == "bess-01")
+    assert set(bess["label"]) == {"vi", "ja"}
+    assert all(set(p["label"]) == {"vi", "ja"} for p in bess["points"])
+    assert all(set(a["message"]) == {"vi", "ja"} for a in s["alert_rules"])

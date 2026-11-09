@@ -117,6 +117,45 @@ def test_empty_unit_is_allowed():
     assert validate(GOOD) == []
 
 
+# ---------- nhãn hiển thị song ngữ ----------
+@pytest.mark.parametrize("target", ["device", "point"])
+def test_missing_label(target):
+    cfg = broken()
+    obj = device(cfg, "bess-01") if target == "device" else point(cfg, "bess-01", "muc_pin")
+    del obj["label"]
+    e = one_error(cfg)
+    assert ("bess-01.muc_pin" if target == "point" else "bess-01") in e and "label" in e
+
+
+@pytest.mark.parametrize("lang", ["vi", "ja"])
+def test_label_missing_one_language(lang):
+    cfg = broken()
+    del point(cfg, "bess-01", "che_do")["label"][lang]
+    e = one_error(cfg)
+    assert "bess-01.che_do" in e and lang in e
+
+
+def test_label_must_not_be_empty():
+    cfg = broken()
+    point(cfg, "bess-01", "che_do")["label"]["ja"] = "  "
+    e = one_error(cfg)
+    assert "bess-01.che_do" in e and "ja" in e
+
+
+def test_alert_message_needs_both_languages():
+    cfg = broken()
+    cfg["alerts"][0]["message"] = "Tủ điện quá nóng"               # chỉ một chuỗi tiếng Việt
+    e = one_error(cfg)
+    assert "dong-ho-dien-01.nhiet_do_tu" in e and "message" in e
+
+
+def test_alert_on_unknown_point():
+    cfg = broken()
+    cfg["alerts"][0]["point"] = "khong-co.diem_nao"
+    e = one_error(cfg)
+    assert "khong-co.diem_nao" in e
+
+
 # ---------- device_id và địa chỉ ----------
 def test_duplicate_device_id_on_same_address():
     cfg = broken(SITE)

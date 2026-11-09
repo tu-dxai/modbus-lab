@@ -19,6 +19,7 @@ Kiểm tra:
   - hai điểm cùng thiết bị, cùng bảng không đè ô nhớ của nhau (kiểu 32 bit chiếm 2 ô)
   - điểm writable có allowed, hoặc có đủ min và max với min <= max
   - điểm có khóa unit (chuỗi rỗng được phép cho đại lượng không đơn vị)
+  - thiết bị và điểm có label { vi, ja } không rỗng; cảnh báo trỏ tới điểm có thật, message { vi, ja }
 """
 import sys
 from pathlib import Path
@@ -32,6 +33,7 @@ BYTE_ORDERS = ("ABCD", "CDAB", "BADC", "DCBA")
 TABLES = ("holding", "input")
 REQUIRED = ("name", "table", "address", "type")
 CONNECTION = ("host", "port", "device_id")
+LANGS = ("vi", "ja")                               # ngôn ngữ hiển thị bắt buộc cho label và message
 
 
 class PointMapError(Exception):
@@ -138,6 +140,14 @@ def _check_writable(key: str, p: dict) -> list[str]:
     return []
 
 
+def _check_bilingual(owner: str, field: str, value) -> list[str]:
+    """label / message phải là { vi: "...", ja: "..." } với chữ không rỗng."""
+    if not isinstance(value, dict):
+        return [f"{owner}: thiếu {field} song ngữ (dạng {field}: {{ vi: \"...\", ja: \"...\" }})"]
+    missing = [lang for lang in LANGS if not isinstance(value.get(lang), str) or not value[lang].strip()]
+    return [f"{owner}: {field} thiếu bản {', '.join(missing)}"] if missing else []
+
+
 def _check_connection(d: dict) -> list[str]:
     dev = d.get("name", "?")
     missing = [f for f in CONNECTION if f not in d]
@@ -191,6 +201,7 @@ def validate(cfg: dict) -> list[str]:
     for d in devices:
         dev = d.get("name", "?")
         errors += _check_connection(d)
+        errors += _check_bilingual(dev, "label", d.get("label"))
         if d.get("byte_order") not in BYTE_ORDERS:
             errors.append(f"{dev}: byte_order {d.get('byte_order')!r} không hợp lệ "
                           f"(chỉ nhận {', '.join(BYTE_ORDERS)})")
@@ -201,6 +212,7 @@ def validate(cfg: dict) -> list[str]:
             missing = [f for f in REQUIRED if f not in p]
             if missing:
                 errors.append(f"{key}: thiếu trường bắt buộc {', '.join(missing)}")
+            errors += _check_bilingual(key, "label", p.get("label"))
             if "unit" not in p:
                 errors.append(f"{key}: thiếu unit (dùng unit: \"\" nếu không có đơn vị)")
             errors += _check_writable(key, p)
@@ -217,4 +229,10 @@ def validate(cfg: dict) -> list[str]:
                                   f"{o_key} ({p['table']} {_span(o_start, o_size)})")
             used[p["table"]].append((start, size, key))
     errors += _check_shared_addresses(devices)
+    keys = {f"{d.get('name')}.{p.get('name')}" for d in devices for p in d.get("points", [])}
+    for a in cfg.get("alerts", []):
+        point = a.get("point", "?")
+        if point not in keys:
+            errors.append(f"cảnh báo trỏ tới điểm {point} không có trong Point Map")
+        errors += _check_bilingual(f"cảnh báo {point}", "message", a.get("message"))
     return errors

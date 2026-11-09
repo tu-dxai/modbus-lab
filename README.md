@@ -3,7 +3,7 @@
 Bàn thử để kiểm phần mềm edge **trước khi chạm vào thiết bị thật**: simulator đóng vai thiết bị, giá trị do người
 kiểm thử đặt và đứng yên tới khi đổi; simulator ghi lại mọi lệnh ghi client gửi tới (kể cả lệnh bị từ chối) để kiểm
 "với đầu vào X, client có ghi đúng Y vào đúng thiết bị không". Kèm collector mẫu có trang web, công cụ ghi có rào chắn,
-bộ kiểm tra Point Map và 98 bài kiểm thử tự động.
+bộ kiểm tra Point Map và 122 bài kiểm thử tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng Nhật**.
 
 ## Có gì trong thư mục
 
@@ -13,6 +13,9 @@ bộ kiểm tra Point Map và 98 bài kiểm thử tự động.
 | `edge/point-map/environments/lab.yml` | Ánh xạ từng địa chỉ thật sang simulator trên máy này (môi trường mặc định) |
 | `edge/point-map/point_map.py` | Đọc Point Map, áp môi trường, **kiểm tra**; mọi công cụ gọi khi khởi động, có lỗi thì báo hết rồi dừng |
 | `edge/modbus/modbus_io.py` | Đọc điểm và quản lý kết nối: một kết nối cho mỗi `host:port`, thiết bị sau cùng gateway dùng chung |
+| `i18n/messages.yml` | **Từ điển song ngữ vi/ja**: mọi chữ trên hai trang web và mọi thông báo lỗi trang web hiển thị |
+| `i18n/i18n.py`, `i18n.js` | Dịch phía server (lỗi mang mã) và phía trình duyệt (nút đổi ngôn ngữ, dịch chữ và lỗi) |
+| `i18n/export.py` | `make i18n-export`: xuất mọi cặp vi/ja ra bảng TSV để người duyệt bản dịch |
 | `edge/write-service/write.py` | Ghi một điểm **qua rào chắn**: chỉ điểm được phép, giá trị trong `allowed` hoặc `[min, max]`, đọc lại xác nhận |
 | `tools/simulator/sim.py` | Simulator Modbus TCP: mỗi địa chỉ một server — gateway điện (2 đồng hồ, ABCD) và pin BESS (CDAB) |
 | `tools/simulator/sim_state.py` | Giá trị hiện tại của mọi điểm và **nhật ký lệnh ghi** (nhân chứng) |
@@ -22,13 +25,14 @@ bộ kiểm tra Point Map và 98 bài kiểm thử tự động.
 | `tools/dashboard/collector.py` | Đọc mọi điểm, giải mã, kiểm tra cảnh báo, phục vụ trang web và API JSON (đọc và ghi) |
 | `tools/dashboard/collector.html` | Trang web của collector: số liệu theo thiết bị, xu hướng, cảnh báo, nút ghi qua rào chắn |
 | `tests/acceptance/` | 20 bài kiểm thử nghiệm thu, mã MB-xx khớp tài liệu nghiên cứu |
-| `tests/point_map/` | 45 bài kiểm thử bộ kiểm tra Point Map và môi trường, mỗi loại lỗi một bài |
-| `tests/simulator/` | 27 bài kiểm thử simulator: đặt giá trị, nhật ký lệnh ghi, dòng lệnh, nhiều địa chỉ và gateway |
-| `tests/tools/` | 6 bài kiểm thử trang xem số liệu và API web |
+| `tests/point_map/` | 52 bài kiểm thử bộ kiểm tra Point Map và môi trường, mỗi loại lỗi một bài |
+| `tests/simulator/` | 29 bài kiểm thử simulator: đặt giá trị, nhật ký lệnh ghi, dòng lệnh, nhiều địa chỉ và gateway |
+| `tests/tools/` | 12 bài kiểm thử trang xem số liệu và API web |
+| `tests/translations/` | 9 bài kiểm thử từ điển: đủ vi và ja, khớp tham số, mọi khóa trang web và code dùng đều có |
 | `tests/conftest.py` | Bật simulator kiểm thử (môi trường lab, cổng 5021), dùng chung cho mọi bài |
 | `telegraf/` | Cấu hình Telegraf viết tay — **cũ, chưa theo Point Map mới, chưa chạy thử**; sẽ thay bằng cấu hình sinh từ Point Map |
 
-Các module import nhau theo tên ngắn (`codec`, `sim`, `sim_state`, `simctl`, `collector`, `write`, `point_map`, `modbus_io`). Nơi tìm module khai báo trong
+Các module import nhau theo tên ngắn (`codec`, `sim`, `sim_state`, `simctl`, `collector`, `write`, `point_map`, `modbus_io`, `i18n`). Nơi tìm module khai báo trong
 `Makefile` (`PYTHONPATH`) và `pytest.ini` (`pythonpath`), nên hãy chạy qua `make` thay vì gọi thẳng `python`.
 
 ## Cài đặt
@@ -116,6 +120,19 @@ make write P=dong-ho-dien-01.dien_ap V=999   # bị chặn: điểm chỉ đọc
 make test
 ```
 
+## Song ngữ tiếng Việt / tiếng Nhật
+
+Hai trang web (collector `:8080`, điều khiển simulator `:5080`) có nút **Tiếng Việt / 日本語** ở góc trên. Lựa chọn
+được nhớ trên trình duyệt (riêng cho từng trang); lần đầu theo ngôn ngữ trình duyệt; ép bằng `?lang=ja` hoặc `?lang=vi`.
+
+- **Chữ giao diện và thông báo lỗi** nằm ở `i18n/messages.yml`. Lỗi server trả về gồm `error` (tiếng Việt, cho dòng lệnh
+  và log), `code` và `params`; trang web dịch `code` theo ngôn ngữ đang chọn. Dòng lệnh và log luôn là tiếng Việt.
+- **Tên thiết bị, điểm đo, câu cảnh báo** nằm trong Point Map: `label: { vi: ..., ja: ... }` và `message: { vi: ..., ja: ... }`.
+  Mã như `dien_ap` vẫn hiện nhỏ bên dưới để đối chiếu.
+- `make test` bắt lỗi thiếu một ngôn ngữ, lệch tham số `{tên}` giữa vi và ja, và khóa dùng mà từ điển không có.
+- **Bản tiếng Nhật cần người Nhật duyệt** trước khi dùng chính thức: `make i18n-export > ban-dich.tsv` rồi mở bằng Excel.
+  Đầu file `i18n/messages.yml` liệt kê các thuật ngữ cần xác nhận (ガード, 計測点, 保持レジスタ...).
+
 ## Kiểm thử client (edge) với simulator
 
 Mẫu một bài kiểm thử cho logic điều khiển: tạo tình huống, chờ client phản ứng, kiểm tra lệnh ghi.
@@ -159,7 +176,8 @@ Client viết bằng ngôn ngữ khác thì gọi thẳng HTTP API (xem đầu f
 | Point Map | Ô nhớ đè nhau (tính cả kiểu 32 bit chiếm 2 ô), byte_order sai, type sai, điểm ghi được thiếu giới hạn, thiếu unit, thiếu trường bắt buộc; host/port/device_id/timeout sai; trùng device_id hoặc khác timeout sau cùng gateway; file môi trường thiếu, thừa, trùng địa chỉ; simulator và collector từ chối khởi động |
 | Mạng | Gateway phục vụ nhiều thiết bị theo device_id; cùng device_id ở hai địa chỉ là hai thiết bị; thiết bị cùng gateway dùng chung kết nối; một địa chỉ mất kết nối không ảnh hưởng địa chỉ khác |
 | Simulator | Giá trị đứng yên; đặt giá trị rồi đọc lại qua Modbus đúng kiểu, byte order, hệ số; đặt sai thì không đổi gì; nhật ký ghi lại lệnh được nhận, lệnh vào ô chỉ đọc, ô không khai báo, sai device_id; chờ lệnh ghi; dòng lệnh |
-| web | Trang chính, `GET /api/points`, ghi qua `POST /api/write`: hợp lệ, bị rào chắn chặn, yêu cầu sai dạng |
+| web | Trang chính, `GET /api/points`, ghi qua `POST /api/write`: hợp lệ, bị rào chắn chặn (kèm mã lỗi để dịch), yêu cầu sai dạng; `/i18n.json`, `/i18n.js`, `?lang=` |
+| Bản dịch | Mỗi khóa đủ vi và ja, cùng tham số; mọi khóa trang web và code dùng đều có; xuất bảng duyệt |
 
 ## Bài tập gợi ý
 
@@ -195,6 +213,9 @@ Simulator, collector và công cụ ghi kiểm tra Point Map khi khởi động;
 không thừa, không hai địa chỉ trỏ chung một chỗ.
 
 **Dữ liệu.**
+
+- Mỗi thiết bị và mỗi điểm có `label: { vi: "...", ja: "..." }` không rỗng; mỗi cảnh báo có `message: { vi, ja }`
+  và phải trỏ tới điểm có thật.
 
 - `byte_order` là `ABCD`, `CDAB`, `BADC` hoặc `DCBA`.
 - Mỗi điểm có `name`, `table` (`holding` hoặc `input`), `address`, `type` (`int16`, `uint16`, `int32`, `uint32`, `float32`) và `unit` (để `""` nếu không có đơn vị).

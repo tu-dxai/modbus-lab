@@ -108,11 +108,13 @@ def test_state_lists_every_point(sim, ctl):
 def test_set_unknown_point_is_rejected(sim, ctl):
     code, r = http(sim.control_url + "/api/state", {"khong-co.diem_nao": 1})
     assert code == 404 and "khong-co.diem_nao" in r["error"]
+    assert r["code"] == "sim.unknown_points" and r["params"]["keys"] == ["khong-co.diem_nao"]
 
 
 def test_set_value_that_does_not_fit_register_is_rejected(sim, ctl, conns):
     code, r = http(sim.control_url + "/api/state", {"dong-ho-dien-01.dien_ap": 7000})   # 70000 > uint16
     assert code == 400 and "dong-ho-dien-01.dien_ap" in r["error"]
+    assert r["code"] == "sim.bad_value" and r["params"]["key"] == "dong-ho-dien-01.dien_ap"
     assert modbus_read(sim, conns, "dong-ho-dien-01.dien_ap") == pytest.approx(230.0)
 
 
@@ -195,6 +197,16 @@ def test_wait_for_write_times_out(sim, ctl):
 def test_control_page(sim):
     code, html = http(sim.control_url + "/")
     assert code == 200 and "<title>Simulator</title>" in html
+
+
+def test_control_serves_dictionary(sim):
+    code, d = http(sim.control_url + "/i18n.json")
+    assert code == 200 and set(d) == {"vi", "ja"} and d["ja"]["sim.bad_value"]
+
+
+def test_state_carries_bilingual_labels(sim, ctl):
+    row = ctl.get("bess-01.muc_pin")
+    assert set(row["label"]) == {"vi", "ja"} and set(row["device_label"]) == {"vi", "ja"}
 
 
 def test_cli_set_and_get(sim, ctl):

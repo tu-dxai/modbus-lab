@@ -19,22 +19,29 @@
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+               "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif; }
   .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; }
   header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 16px; }
   header.top h1 { font-size: 20px; margin: 0; margin-right: auto; }
+  header.top h1 .muted { font-weight: 400; margin-left: 6px; }
   .pill { padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
   .pill.ok { color: var(--ok); background: var(--ok-bg); }
   .pill.warn { color: var(--warn); background: var(--warn-bg); }
   .pill.err { color: var(--err); background: var(--err-bg); }
   .muted { color: var(--muted); font-size: 13px; }
+  .langs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .langs button { border: 0; border-radius: 0; padding: 4px 10px; font-size: 13px; }
+  .langs button + button { border-left: 1px solid var(--line); }
+  .langs button.on { background: var(--accent); color: #fff; }
   #alerts:empty { display: none; }
   #alerts { margin-bottom: 16px; padding: 10px 14px; border-radius: 10px; background: var(--err-bg); color: var(--err); }
   #alerts div + div { margin-top: 4px; }
   #devices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-  .card > header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-  .card h2 { font-size: 16px; margin: 0; }
+  .card > header { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .card h2 { font-size: 16px; margin: 0 0 2px; }
   .row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
   .row:last-child { border-bottom: 0; }
   .row.hot { background: var(--err-bg); }
@@ -73,22 +80,27 @@
 <body>
 <div class="wrap">
   <header class="top">
-    <h1>Modbus lab <span id="site" class="muted"></span></h1>
-    <span id="conn" class="pill warn">Đang tải…</span>
+    <h1><span data-i18n="dash.title">Modbus lab</span><span id="site" class="muted"></span></h1>
+    <span id="conn" class="pill warn" data-i18n="dash.loading"></span>
     <span id="info" class="muted"></span>
+    <div class="langs"><button data-lang="vi">Tiếng Việt</button><button data-lang="ja">日本語</button></div>
   </header>
   <div id="alerts"></div>
   <main id="devices"></main>
-  <footer class="muted">Cập nhật mỗi 2 giây. Lệnh ghi đi qua rào chắn: chỉ điểm và giá trị được phép, đọc lại để xác nhận.
+  <footer class="muted"><span data-i18n="dash.footer"></span>
     JSON: <a href="/api/points">/api/points</a></footer>
 </div>
 <div id="toast"></div>
 
+<script src="/i18n.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
 const SVG = 'http://www.w3.org/2000/svg';
-let built = '';                       // mô tả thiết bị lần dựng trước; đổi thì dựng lại
-const rows = {};                      // key -> các phần tử cần cập nhật
+let built = '';                       // mô tả thiết bị + ngôn ngữ lần dựng trước; đổi thì dựng lại
+let last = null;                      // số liệu lần tải gần nhất, để vẽ lại ngay khi đổi ngôn ngữ
+let connState = null;                 // trạng thái kết nối, để dịch lại khi đổi ngôn ngữ
+const rows = {};                      // điểm -> các phần tử cần cập nhật
+const labels = {};                    // điểm -> nhãn song ngữ
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -97,11 +109,12 @@ function el(tag, cls, text) {
   return e;
 }
 
-const fmt = (v) => Number(v).toLocaleString('vi-VN', { maximumFractionDigits: 2 });
+const fmt = (v) => Number(v).toLocaleString(locale(), { maximumFractionDigits: 2 });
 
 function rulesText(rules, key) {
   return rules.filter(a => a.point === key)
-    .map(a => 'above' in a ? `cảnh báo > ${a.above}` : `cảnh báo < ${a.below}`).join(', ');
+    .map(a => 'above' in a ? t('dash.threshold_above', { value: a.above }) : t('dash.threshold_below', { value: a.below }))
+    .join(', ');
 }
 
 function build(s) {
@@ -111,16 +124,18 @@ function build(s) {
   for (const d of s.devices) {
     const card = el('section', 'card');
     const h = el('header');
-    const site = d.site_endpoint !== d.endpoint ? ` (site ${d.site_endpoint})` : '';
-    h.append(el('h2', '', d.name),
-             el('span', 'muted', `${d.endpoint}${site} · device_id ${d.device_id} · byte order ${d.byte_order}`));
+    const site = d.site_endpoint !== d.endpoint ? t('dash.site_suffix', { site: d.site_endpoint }) : '';
+    h.append(el('h2', '', tr(d.label)),
+             el('div', 'meta', `${d.name} · ` + t('common.device_meta',
+               { endpoint: d.endpoint, site, id: d.device_id, order: d.byte_order })));
     card.append(h);
     for (const p of d.points) {
+      labels[p.key] = p.label;
       const row = el('div', 'row');
       const info = el('div');
       const rule = rulesText(s.alert_rules, p.key);
-      info.append(el('div', 'name', p.name),
-                  el('div', 'meta', `${p.table} ${p.address} · ${p.type}${rule ? ' · ' + rule : ''}`));
+      info.append(el('div', 'name', tr(p.label)),
+                  el('div', 'meta', `${p.name} · ${p.table} ${p.address} · ${p.type}${rule ? ' · ' + rule : ''}`));
       const spark = document.createElementNS(SVG, 'svg');
       spark.setAttribute('class', 'spark');
       spark.setAttribute('viewBox', '0 0 110 30');
@@ -143,7 +158,7 @@ function build(s) {
 
 function controls(p, r) {
   const ctl = el('div', 'ctl');
-  ctl.append(el('span', 'lbl', 'Ghi:'));
+  ctl.append(el('span', 'lbl', t('dash.write_label')));
   if (p.allowed) {
     for (const v of p.allowed) {
       const b = el('button', '', String(v));
@@ -155,7 +170,7 @@ function controls(p, r) {
   } else {
     const inp = el('input');
     inp.type = 'number'; inp.step = 'any';
-    const b = el('button', '', 'Ghi');
+    const b = el('button', '', t('dash.write_button'));
     b.onclick = () => inp.value !== '' && write(p.key, Number(inp.value), [b]);
     r.buttons.push(b);
     ctl.append(inp, b);
@@ -172,6 +187,13 @@ function sparkPoints(vals) {
              .filter(Boolean).join(' ');
 }
 
+function setConn(kind, key) {
+  connState = [kind, key];
+  const conn = $('#conn');
+  conn.className = 'pill ' + kind;
+  conn.textContent = t(key);
+}
+
 function update(s) {
   const firing = new Map(s.alert_rules.filter(a => a.firing).map(a => [a.point, a]));
   let ok = 0, total = 0;
@@ -179,55 +201,60 @@ function update(s) {
     const p = s.points[key];
     total++;
     if (p && p.ok) ok++;
-    r.num.textContent = !p ? '—' : p.ok ? fmt(p.value) : 'LỖI';
+    r.num.textContent = !p ? '—' : p.ok ? fmt(p.value) : t('common.error');
     r.row.classList.toggle('err', !!p && !p.ok);
     r.row.classList.toggle('hot', firing.has(key));
-    if (p && !p.ok) { r.note.textContent = p.error; r.note.className = 'note err'; }
-    else if (firing.has(key)) { r.note.textContent = '⚠ ' + firing.get(key).message; r.note.className = 'note err'; }
+    if (p && !p.ok) { r.note.textContent = errText(p); r.note.className = 'note err'; }
+    else if (firing.has(key)) { r.note.textContent = '⚠ ' + tr(firing.get(key).message); r.note.className = 'note err'; }
     else r.note.textContent = '';
     r.line.setAttribute('points', sparkPoints(s.history[key] || []));
     for (const b of r.buttons) if (b.dataset.v !== undefined)
       b.classList.toggle('on', !!p && p.ok && Number(b.dataset.v) === p.value);
   }
 
-  const alerts = $('#alerts');
-  alerts.replaceChildren(...[...firing.values()].map(a =>
-    el('div', '', `⚠ ${a.message} — ${a.point} = ${fmt(s.points[a.point].value)} ${s.points[a.point].unit}`)));
+  $('#alerts').replaceChildren(...[...firing.values()].map(a => {
+    const p = s.points[a.point];
+    return el('div', '', `⚠ ${tr(a.message)} — ${tr(labels[a.point]) || a.point} = ${fmt(p.value)} ${p.unit}`);
+  }));
 
-  const conn = $('#conn');
-  if (total && ok === total) { conn.className = 'pill ok'; conn.textContent = 'Đang đọc'; }
-  else if (ok > 0) { conn.className = 'pill warn'; conn.textContent = 'Một số điểm lỗi'; }
-  else { conn.className = 'pill err'; conn.textContent = s.status.round ? 'Mất kết nối thiết bị' : 'Chờ lượt đọc đầu'; }
-  $('#site').textContent = s.site ? `${s.site} · môi trường ${s.env}` : '';
-  $('#info').textContent = s.status.round ? `Lượt ${s.status.round} · lúc ${s.status.at} · ${ok}/${total} điểm đọc được` : '';
+  if (total && ok === total) setConn('ok', 'dash.status_ok');
+  else if (ok > 0) setConn('warn', 'dash.status_partial');
+  else setConn('err', s.status.round ? 'dash.status_down' : 'dash.status_waiting');
+  $('#site').textContent = s.site ? t('dash.site', { site: s.site, env: s.env }) : '';
+  $('#info').textContent = s.status.round
+    ? t('dash.round', { round: s.status.round, at: s.status.at, ok, total }) : '';
+}
+
+function render() {
+  if (!last) return;
+  const shape = JSON.stringify([I18N.lang, last.devices, last.alert_rules.map(a => [a.point, a.above, a.below])]);
+  if (shape !== built) { build(last); built = shape; }
+  update(last);
 }
 
 async function load() {
   try {
     const res = await fetch('/api/points', { cache: 'no-store' });
-    const s = await res.json();
-    const shape = JSON.stringify([s.devices, s.alert_rules.map(a => [a.point, a.above, a.below])]);
-    if (shape !== built) { build(s); built = shape; }
-    update(s);
+    last = await res.json();
+    render();
   } catch (e) {
-    const conn = $('#conn');
-    conn.className = 'pill err';
-    conn.textContent = 'Không gọi được collector';
+    setConn('err', 'dash.status_no_collector');
   }
   setTimeout(load, 2000);
 }
 
 let toastTimer;
 function toast(msg, kind) {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.className = kind;
+  const box = $('#toast');
+  box.textContent = msg;
+  box.className = kind;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.className = ''; }, 5000);
+  toastTimer = setTimeout(() => { box.className = ''; }, 5000);
 }
 
 async function write(key, value, buttons) {
-  if (!confirm(`Ghi ${key} = ${value}?`)) return;
+  const point = tr(labels[key]) ? `${tr(labels[key])} (${key})` : key;
+  if (!confirm(t('dash.confirm_write', { point, value }))) return;
   buttons.forEach(b => b.disabled = true);
   try {
     const res = await fetch('/api/write', {
@@ -235,16 +262,23 @@ async function write(key, value, buttons) {
       body: JSON.stringify({ point: key, value }),
     });
     const j = await res.json();
-    if (j.ok) toast(`Đã ghi ${key}: ${fmt(j.before)} → ${fmt(j.after)} (đã đọc lại xác nhận)`, 'ok');
-    else toast((j.blocked ? 'Rào chắn từ chối: ' : 'Lỗi: ') + j.error, 'err');
+    if (j.ok) toast(t('dash.write_ok', { point, before: fmt(j.before), after: fmt(j.after) }), 'ok');
+    else toast(t(j.blocked ? 'dash.blocked' : 'dash.failed', { reason: errText(j) }), 'err');
   } catch (e) {
-    toast('Không gọi được collector', 'err');
+    toast(t('dash.status_no_collector'), 'err');
   } finally {
     buttons.forEach(b => b.disabled = false);
   }
 }
 
-load();
+initI18n(() => {
+  document.title = t('dash.title');
+  if (connState) setConn(...connState);
+  render();
+}).then(() => {
+  document.title = t('dash.title');
+  load();
+});
 </script>
 </body>
 </html>

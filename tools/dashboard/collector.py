@@ -14,6 +14,8 @@ import argparse, json, logging, threading, time, warnings
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlparse
+from i18n import SCRIPT, ApiError, Translatable, by_language, t
 from modbus_io import Connections, address
 from point_map import DEFAULT_PATH, load_or_exit
 
@@ -37,12 +39,15 @@ def poll_once(conns, cfg):
                 key = f"{d['name']}.{p['name']}"
                 row = {"unit": p.get("unit", ""), "at": time.strftime("%H:%M:%S")}
                 if ep in down:
-                    row.update(value=None, ok=False, error=f"không kết nối được {ep}")
+                    row.update(value=None, ok=False, **_error_row("read.unreachable", endpoint=ep))
                 else:
                     try:
                         row.update(value=round(conns.read(d, p), 2), ok=True)
-                    except Exception as e:         # timeout, mã lỗi, rớt kết nối giữa chừng
-                        row.update(value=None, ok=False, error=str(e) or type(e).__name__)
+                    except Translatable as e:      # thiết bị trả mã lỗi Modbus
+                        row.update(value=None, ok=False, **_error_row(e.code, **e.params))
+                    except Exception as e:         # timeout, rớt kết nối giữa chừng
+                        row.update(value=None, ok=False,
+                                   **_error_row("read.failed", detail=str(e) or type(e).__name__))
                 rows[key] = row
     with DATA_LOCK:
         LATEST.update(rows)
@@ -52,12 +57,17 @@ def poll_once(conns, cfg):
         check_alerts(cfg)
 
 
+def _error_row(code: str, **params) -> dict:
+    """Lỗi của một điểm: error tiếng Việt cho dòng lệnh, code + params để trang web dịch."""
+    return {"error": t(code, **params), "code": code, "params": params}
+
+
 def check_alerts(cfg):
     for a in cfg.get("alerts", []):
         v = LATEST.get(a["point"], {}).get("value")
         firing = v is not None and (("above" in a and v > a["above"]) or ("below" in a and v < a["below"]))
         if firing and not ALERTS.get(a["point"]):
-            print(f"  !! CẢNH BÁO: {a['message']} — {a['point']} = {v}")
+            print(f"  !! CẢNH BÁO: {a['message']['vi']} — {a['point']} = {v}")
         elif not firing and ALERTS.get(a["point"]):
             print(f"  ok Hết cảnh báo: {a['point']} = {v}")
         ALERTS[a["point"]] = firing
@@ -71,9 +81,10 @@ def print_table():
 
 def snapshot(cfg):
     """Mọi thứ trang web cần trong một lần gọi. Gọi khi đang giữ DATA_LOCK."""
-    devices = [{"name": d["name"], "device_id": d["device_id"], "byte_order": d["byte_order"],
+    devices = [{"name": d["name"], "label": d["label"], "device_id": d["device_id"], "byte_order": d["byte_order"],
                 "endpoint": address(d), "site_endpoint": d.get("site_address", address(d)),
-                "points": [{"key": f"{d['name']}.{p['name']}", "name": p["name"], "unit": p.get("unit", ""),
+                "points": [{"key": f"{d['name']}.{p['name']}", "name": p["name"], "label": p["label"],
+                            "unit": p.get("unit", ""),
                             "table": p["table"], "address": p["address"], "type": p["type"],
                             "writable": bool(p.get("writable")), "allowed": p.get("allowed")}
                            for p in d["points"]]}
@@ -104,32 +115,39 @@ class Web(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path == "/api/points":
+        path = urlparse(self.path).path           # bỏ phần ?lang=... của trang web
+        if path == "/api/points":
             with DATA_LOCK:
                 body = json.dumps(snapshot(self.cfg), ensure_ascii=False).encode()
             self.reply(200, body)
-        elif self.path in ("/", "/index.html"):
+        elif path in ("/", "/index.html"):
             self.reply(200, PAGE.read_bytes(), "text/html; charset=utf-8")
+        elif path == "/i18n.json":
+            self.reply(200, by_language())
+        elif path == "/i18n.js":
+            self.reply(200, SCRIPT.read_bytes(), "text/javascript; charset=utf-8")
         else:
-            self.reply(404, {"ok": False, "error": "không có đường dẫn này"})
+            self.reply(404, {"ok": False, **ApiError("api.not_found").as_json()})
 
     def do_POST(self):
-        if self.path != "/api/write":
-            return self.reply(404, {"ok": False, "error": "không có đường dẫn này"})
+        if urlparse(self.path).path != "/api/write":
+            return self.reply(404, {"ok": False, **ApiError("api.not_found").as_json()})
         from write import WriteBlocked, write_guarded     # nhập muộn: write.py cũng nhập collector
         try:
             req = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)))
             key, value = str(req["point"]), float(req["value"])
         except (ValueError, KeyError, TypeError):
-            return self.reply(400, {"ok": False, "error": 'cần JSON dạng {"point": "...", "value": số}'})
+            return self.reply(400, {"ok": False, **ApiError("api.bad_write_request").as_json()})
         try:
             with CLIENT_LOCK:
                 before, after = write_guarded(self.cfg, self.conns, key, value)
         except WriteBlocked as e:
             print(f"  xx Rào chắn từ chối lệnh ghi từ web: {key} = {value} ({e})")
-            return self.reply(403, {"ok": False, "blocked": True, "error": str(e)})
-        except Exception as e:
-            return self.reply(502, {"ok": False, "error": str(e) or type(e).__name__})
+            return self.reply(403, {"ok": False, "blocked": True, **e.as_json()})
+        except Translatable as e:                  # thiết bị từ chối, đọc lại không khớp, mã lỗi Modbus
+            return self.reply(502, {"ok": False, **e.as_json()})
+        except Exception as e:                     # mất kết nối, timeout
+            return self.reply(502, {"ok": False, **_error_row("read.failed", detail=str(e) or type(e).__name__)})
         print(f"  >> Ghi từ web: {key}: {before} -> {after} (đã đọc lại xác nhận)")
         self.reply(200, {"ok": True, "point": key, "before": before, "after": after})
 

@@ -5,15 +5,16 @@ Tách khỏi sim.py để sim.py (chạy trực tiếp) và sim_control.py dùng
 import random, struct, threading, time
 from datetime import datetime
 from codec import SIZE, decode, encode
+from i18n import Translatable
 
 WRITE_FC = {6, 16}
 
 
-class UnknownPoint(Exception):
+class UnknownPoint(Translatable):
     """Điểm không có trong Point Map."""
 
 
-class BadValue(Exception):
+class BadValue(Translatable):
     """Giá trị không ghi vừa thanh ghi theo kiểu dữ liệu và hệ số của điểm."""
 
 
@@ -62,14 +63,14 @@ class SimState:
         try:
             regs = encode(float(value), p["type"], d["byte_order"], scale)
         except (struct.error, ValueError, TypeError, OverflowError):
-            raise BadValue(f"{key}: giá trị {value} không vừa kiểu {p['type']} với hệ số {scale}") from None
+            raise BadValue("sim.bad_value", key=key, value=value, type=p["type"], scale=scale) from None
         return _round(decode(regs, p["type"], d["byte_order"], scale))
 
     def set_many(self, values: dict) -> dict:
         """Đặt nhiều điểm cùng lúc; một điểm sai thì không điểm nào đổi."""
         unknown = [k for k in values if k not in self.points]
         if unknown:
-            raise UnknownPoint(f"không có điểm {', '.join(repr(k) for k in unknown)} trong Point Map")
+            raise UnknownPoint("sim.unknown_points", keys=unknown)
         new = {k: self._quantize(k, v) for k, v in values.items()}
         with self.lock:
             self.values.update(new)
@@ -80,7 +81,8 @@ class SimState:
             values = dict(self.values)
         out = {}
         for key, (d, p) in self.points.items():
-            row = {"device": d["name"], "device_id": d["device_id"], "byte_order": d["byte_order"],
+            row = {"device": d["name"], "device_label": d["label"], "label": p["label"],
+                   "device_id": d["device_id"], "byte_order": d["byte_order"],
                    "endpoint": endpoint(d), "site_endpoint": d.get("site_address", endpoint(d)),
                    "table": p["table"], "address": p["address"], "type": p["type"], "unit": p.get("unit", ""),
                    "writable": bool(p.get("writable")), "value": values[key]}
