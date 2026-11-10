@@ -49,3 +49,17 @@ def test_one_address_down_does_not_affect_others(cfg):
     assert all(not r["ok"] and "127.0.1.21:5999" in r["error"] and r["code"] == "read.unreachable"
                for k, r in LATEST.items() if k.startswith("dong-ho-dien"))
     assert all(r["ok"] for k, r in LATEST.items() if k.startswith("bess-01"))
+
+
+def test_startup_banner_lists_every_protocol():
+    """Dòng chữ khi `make sim` khởi động: đủ mọi thiết bị, kể cả RTU / SNMP / BACnet (không có device_id)."""
+    from point_map import read
+    from sim import banner
+    cfg = read("edge/point-map/devices.yml", env="lab")
+    text = "\n".join(banner(cfg))
+    for d in cfg["devices"]:
+        assert d["name"] in text
+        for p in d["points"]:
+            assert p["name"] in text
+    for word in ("Modbus TCP", "Modbus RTU", "SNMP", "BACnet/IP", "OID 1.3.6.1.2.1.33", "analog-value,1"):
+        assert word in text

@@ -20,6 +20,9 @@
 # ---------- chung cho hai trang ----------
 common.device_meta:      { vi: "{endpoint}{site} · device_id {id} · byte order {order}",
                            ja: "{endpoint}{site} · device_id {id} · バイト順 {order}" }
+common.device_meta_snmp: { vi: "{endpoint}{site} · SNMP v{version} (UDP)", ja: "{endpoint}{site} · SNMP v{version}（UDP）" }
+common.device_meta_bacnet: { vi: "{endpoint}{site} · BACnet/IP · device instance {instance}",
+                           ja: "{endpoint}{site} · BACnet/IP · デバイスインスタンス {instance}" }
 common.error:            { vi: "LỖI",                ja: "エラー" }
 
 # ---------- trang collector (tools/dashboard) ----------
@@ -27,29 +30,28 @@ dash.title:              { vi: "Bảng số liệu Modbus", ja: "Modbus 計測�
 dash.site:               { vi: "{site} · môi trường {env}", ja: "{site} · 環境 {env}" }
 dash.site_suffix:        { vi: " (địa chỉ site {site})", ja: "（現地アドレス {site}）" }
 dash.loading:            { vi: "Đang tải…",          ja: "読み込み中…" }
-dash.status_ok:          { vi: "Đang đọc",           ja: "取得中" }
+dash.status_ok:          { vi: "Kết nối tốt",        ja: "通信正常" }
+dash.status_idle:        { vi: "Chưa đọc",           ja: "未読み取り" }
 dash.status_partial:     { vi: "Một số điểm lỗi",    ja: "一部の計測点でエラー" }
 dash.status_down:        { vi: "Mất kết nối thiết bị", ja: "機器と通信できません" }
-dash.status_waiting:     { vi: "Chờ lượt đọc đầu tiên", ja: "初回の読み取り待ち" }
 dash.status_no_collector: { vi: "Không kết nối được collector", ja: "コレクターに接続できません" }
 dash.round:              { vi: "Lượt {round} · lúc {at} · đọc được {ok}/{total} điểm",
                            ja: "第{round}回 · {at} · {total}点中{ok}点を取得" }
 dash.threshold_above:    { vi: "cảnh báo khi > {value}", ja: "{value} 超で警報" }
 dash.threshold_below:    { vi: "cảnh báo khi < {value}", ja: "{value} 未満で警報" }
-dash.write_label:        { vi: "Ghi:",               ja: "書き込み:" }
 dash.write_button:       { vi: "Ghi",                ja: "書き込み" }
 dash.confirm_write:      { vi: "Ghi {point} = {value}?", ja: "{point} に {value} を書き込みますか？" }
+dash.confirm_relinquish: { vi: "Nhả lệnh {point} ở mức ưu tiên {priority}? Thiết bị sẽ về lệnh ưu tiên thấp hơn hoặc giá trị mặc định.",
+                           ja: "{point} の優先度 {priority} の指令を解除しますか？機器は下位の指令または既定値に戻ります。" }
+dash.relinquish_ok:      { vi: "Đã nhả lệnh {point} (ưu tiên {priority}): giá trị hiện tại {after}",
+                           ja: "{point} の指令を解除しました（優先度 {priority}）：現在値 {after}" }
 dash.write_ok:           { vi: "Đã ghi {point}: {before} → {after} (đã đọc lại xác nhận)",
                            ja: "{point} に書き込みました：{before} → {after}（読み戻し確認済み）" }
 dash.blocked:            { vi: "Rào chắn từ chối: {reason}", ja: "ガードにより拒否：{reason}" }
 dash.failed:             { vi: "Lỗi: {reason}",      ja: "エラー：{reason}" }
-dash.footer:             { vi: "Cập nhật mỗi 2 giây. Lệnh ghi đi qua rào chắn: chỉ điểm và giá trị được phép, ghi xong đọc lại để xác nhận.",
-                           ja: "2秒ごとに更新します。書き込みはガードを経由し、許可された計測点と値のみ受け付け、書き込み後に読み戻して確認します。" }
 
 # ---------- trang điều khiển simulator (tools/simulator) ----------
 simui.title:             { vi: "Simulator thiết bị", ja: "機器シミュレーター" }
-simui.lead:              { vi: "Đặt giá trị cho thiết bị giả ở cột trái; client đọc qua Modbus sẽ thấy đúng giá trị đó. Mọi lệnh ghi client gửi tới hiện ở cột phải, kể cả lệnh bị thiết bị từ chối.",
-                           ja: "左側で模擬機器の値を設定します。Modbus で読み取るクライアントには、その値がそのまま見えます。クライアントから届いた書き込みは、機器が拒否したものも含めて右側に表示されます。" }
 simui.site_suffix:       { vi: " (giả lập {site})",  ja: "（{site} を模擬）" }
 simui.connecting:        { vi: "Đang kết nối",       ja: "接続中" }
 simui.running:           { vi: "Đang chạy",          ja: "稼働中" }
@@ -63,19 +65,6 @@ simui.allowed:           { vi: "cho phép {values}",  ja: "許可値 {values}" }
 simui.range:             { vi: "khoảng {min}…{max}", ja: "範囲 {min}～{max}" }
 simui.new_value:         { vi: "giá trị mới",        ja: "新しい値" }
 simui.set:               { vi: "Đặt",                ja: "設定" }
-simui.log_title:         { vi: "Lệnh ghi từ client", ja: "クライアントからの書き込み" }
-simui.log_count:         { vi: "{n} lệnh",           ja: "{n} 件" }
-simui.clear:             { vi: "Xóa nhật ký",        ja: "ログを消去" }
-simui.empty:             { vi: "Chưa có lệnh ghi nào.", ja: "書き込みはまだありません。" }
-simui.accepted:          { vi: "ĐÃ NHẬN",            ja: "受理" }
-simui.rejected:          { vi: "TỪ CHỐI · mã {code}", ja: "拒否 · コード {code}" }
-simui.unknown_device:    { vi: "device_id {id} không tồn tại", ja: "device_id {id} は存在しません" }
-simui.target:            { vi: "tới {endpoint}",     ja: "宛先 {endpoint}" }
-simui.no_point:          { vi: "không trúng điểm nào trong Point Map", ja: "Point Map のどの計測点にも該当しません" }
-simui.attempt:           { vi: "{name}: định ghi {value} (vẫn giữ {before})",
-                           ja: "{name}：{value} を書き込もうとしました（{before} のまま）" }
-simui.raw:               { vi: "FC{fc} · ô {address} · thanh ghi [{registers}]",
-                           ja: "FC{fc} · アドレス {address} · レジスタ [{registers}]" }
 
 # ---------- lỗi rào chắn ghi (edge/write-service) ----------
 write.unknown_point:     { vi: "không có điểm '{key}' trong Point Map", ja: "計測点 '{key}' は Point Map にありません" }
@@ -95,6 +84,14 @@ write.readback_mismatch: { vi: "đọc lại được {after}, không khớp gi�
 read.modbus_exception:   { vi: "mã lỗi Modbus {code}", ja: "Modbus 例外コード {code}" }
 read.unreachable:        { vi: "không kết nối được {endpoint}", ja: "{endpoint} に接続できません" }
 read.failed:             { vi: "không đọc được: {detail}", ja: "読み取りに失敗しました：{detail}" }
+read.snmp_no_answer:     { vi: "{endpoint} không trả lời SNMP sau {s} giây (sai community hoặc mất kết nối)",
+                           ja: "{endpoint} が {s} 秒以内に SNMP 応答しません（コミュニティ名の誤りまたは通信断）" }
+read.snmp_error:         { vi: "thiết bị báo lỗi SNMP: {status}", ja: "機器が SNMP エラーを返しました：{status}" }
+read.snmp_no_oid:        { vi: "thiết bị không có OID {oid}", ja: "機器に OID {oid} がありません" }
+read.bacnet_no_answer:   { vi: "{endpoint} không trả lời BACnet sau {s} giây", ja: "{endpoint} が {s} 秒以内に BACnet 応答しません" }
+read.bacnet_error:       { vi: "thiết bị BACnet báo lỗi: {detail}", ja: "BACnet 機器がエラーを返しました：{detail}" }
+write.not_bacnet:        { vi: "chỉ điểm BACnet ghi được mới nhả lệnh được ('{key}')",
+                           ja: "指令の解除（relinquish）は書き込み可能な BACnet 計測点のみです（'{key}'）" }
 
 # ---------- lỗi kênh điều khiển simulator ----------
 sim.unknown_points:      { vi: "không có điểm {keys} trong Point Map", ja: "計測点 {keys} は Point Map にありません" }
@@ -107,3 +104,202 @@ api.bad_write_request:   { vi: "yêu cầu cần JSON gồm point (tên điểm)
                            ja: "point（計測点名）と value（数値）を含む JSON が必要です" }
 api.bad_state_request:   { vi: "yêu cầu cần JSON dạng tên điểm: giá trị", ja: "「計測点名: 値」形式の JSON が必要です" }
 api.bad_since:           { vi: "since phải là số nguyên", ja: "since は整数で指定してください" }
+api.bad_read_request:    { vi: "yêu cầu đọc cần JSON, có thể kèm device hoặc point", ja: "読み取り要求は JSON（device または point を指定可）が必要です" }
+api.unknown_target:      { vi: "không có thiết bị hoặc điểm '{target}'", ja: "機器または計測点 '{target}' はありません" }
+api.bad_auto:            { vi: "interval phải là 0 (tắt) hoặc số giây nguyên từ 1 đến {max}", ja: "interval は 0（オフ）または 1～{max} の整数秒で指定してください" }
+api.bad_frames_query:    { vi: "since, limit và function phải là số nguyên", ja: "since・limit・function は整数で指定してください" }
+
+# ---------- khung tin Modbus TCP (tools/simulator/frames.py) ----------
+# Tên trường: hiện dưới từng nhóm byte. Thứ tự trên đường truyền: MBAP (7 byte) rồi PDU.
+frame.f.transaction:     { vi: "Mã giao dịch",       ja: "トランザクションID" }
+frame.f.protocol:        { vi: "Giao thức",          ja: "プロトコルID" }
+frame.f.length:          { vi: "Độ dài",             ja: "長さ" }
+frame.f.unit:            { vi: "Unit ID",            ja: "ユニットID" }
+frame.f.function:        { vi: "Mã lệnh",            ja: "機能コード" }
+frame.f.start:           { vi: "Ô đầu",              ja: "開始アドレス" }
+frame.f.quantity:        { vi: "Số ô",               ja: "レジスタ数" }
+frame.f.byte_count:      { vi: "Số byte",            ja: "バイト数" }
+frame.f.data:            { vi: "Dữ liệu",            ja: "データ" }
+frame.f.address:         { vi: "Ô",                  ja: "アドレス" }
+frame.f.value:           { vi: "Giá trị",            ja: "値" }
+frame.f.values:          { vi: "Giá trị ghi",        ja: "書き込み値" }
+frame.f.exception:       { vi: "Mã lỗi",             ja: "例外コード" }
+frame.f.raw:             { vi: "Byte thô",           ja: "生データ" }
+frame.f.crc:             { vi: "CRC",                ja: "CRC" }
+
+frame.fc.3:              { vi: "Đọc holding register (FC03)", ja: "保持レジスタ読み出し（FC03）" }
+frame.fc.4:              { vi: "Đọc input register (FC04)",   ja: "入力レジスタ読み出し（FC04）" }
+frame.fc.6:              { vi: "Ghi một thanh ghi (FC06)",    ja: "単一レジスタ書き込み（FC06）" }
+frame.fc.16:             { vi: "Ghi nhiều thanh ghi (FC16)",  ja: "複数レジスタ書き込み（FC16）" }
+frame.fc.other:          { vi: "Mã lệnh khác",               ja: "その他の機能コード" }
+
+frame.sum.read:          { vi: "đọc {table} từ ô {start}, {count} ô", ja: "{table} をアドレス {start} から {count} 個読み出し" }
+frame.sum.registers:     { vi: "trả {count} thanh ghi",  ja: "レジスタ {count} 個を応答" }
+frame.sum.write_single:  { vi: "ghi ô {address} = {value}", ja: "アドレス {address} に {value} を書き込み" }
+frame.sum.write_single_ack: { vi: "xác nhận đã ghi ô {address} = {value}", ja: "アドレス {address} = {value} の書き込みを確認" }
+frame.sum.write_multi:   { vi: "ghi {count} ô từ ô {start}: {values}", ja: "アドレス {start} から {count} 個を書き込み：{values}" }
+frame.sum.write_multi_ack: { vi: "xác nhận đã ghi {count} ô từ ô {start}", ja: "アドレス {start} から {count} 個の書き込みを確認" }
+frame.sum.malformed:     { vi: "khung tin không đúng định dạng Modbus TCP", ja: "Modbus TCP の形式に合わないフレーム" }
+frame.sum.other:         { vi: "mã lệnh {fc}, chưa giải nghĩa", ja: "機能コード {fc}（未解析）" }
+
+# Mã lỗi Modbus (exception code) trong phản hồi lỗi: mã lệnh + 0x80, kèm một byte mã lỗi.
+frame.exc.1:             { vi: "lỗi 01 — thiết bị không hỗ trợ mã lệnh này", ja: "例外 01：不正な機能コード" }
+frame.exc.2:             { vi: "lỗi 02 — địa chỉ thanh ghi không hợp lệ",     ja: "例外 02：不正なデータアドレス" }
+frame.exc.3:             { vi: "lỗi 03 — giá trị không hợp lệ",              ja: "例外 03：不正なデータ値" }
+frame.exc.4:             { vi: "lỗi 04 — thiết bị gặp sự cố",                ja: "例外 04：機器の障害" }
+frame.exc.6:             { vi: "lỗi 06 — thiết bị đang bận",                 ja: "例外 06：機器ビジー" }
+frame.exc.10:            { vi: "lỗi 0A — gateway không có đường tới thiết bị", ja: "例外 0A：ゲートウェイの経路がありません" }
+frame.exc.11:            { vi: "lỗi 0B — thiết bị sau gateway không trả lời", ja: "例外 0B：ゲートウェイ先の機器が応答しません" }
+frame.exc.other:         { vi: "lỗi {code}",                                 ja: "例外 {code}" }
+
+# Sự cố chỉ phía client thấy: gửi đi mà không có phản hồi.
+frame.status.timeout:    { vi: "không có phản hồi sau {s} giây", ja: "{s} 秒以内に応答がありません" }
+
+# Giải nghĩa: từ byte thô tới giá trị của điểm đo.
+frame.explain_16:        { vi: "{hex} = {raw} (×{scale}) → {name} = {value} {unit}",
+                           ja: "{hex} = {raw}（×{scale}）→ {name} = {value} {unit}" }
+frame.explain_32:        { vi: "{hex} ({type}, byte order {order}) → {name} = {value} {unit}",
+                           ja: "{hex}（{type}、バイト順 {order}）→ {name} = {value} {unit}" }
+
+# Trang điều khiển: khu khung tin. "Gửi/Nhận" nhìn từ phía client, giống công cụ Modbus thông dụng.
+frames.hint:             { vi: "Từng byte trên đường truyền, trước khi giải mã. Gửi: collector gửi tới thiết bị · Nhận: thiết bị trả về collector.",
+                           ja: "デコード前の通信バイト列です。送信：コレクター → 機器 · 受信：機器 → コレクター。" }
+frames.title:            { vi: "Khung tin Modbus",   ja: "Modbus フレーム" }
+frames.no_response:      { vi: "Không phản hồi",     ja: "応答なし" }
+frames.unreachable:      { vi: "Không kết nối",      ja: "接続不可" }
+frames.sent:        { vi: "Gửi",                ja: "送信" }
+frames.received:    { vi: "Nhận",               ja: "受信" }
+frames.all_devices: { vi: "Mọi thiết bị",      ja: "すべての機器" }
+frames.all_functions: { vi: "Mọi lệnh",        ja: "すべての機能" }
+frames.errors:     { vi: "Chỉ lỗi",            ja: "エラーのみ" }
+frames.pause:      { vi: "Tạm dừng",           ja: "一時停止" }
+frames.resume:     { vi: "Tiếp tục",           ja: "再開" }
+frames.clear:      { vi: "Xóa",                ja: "消去" }
+frames.empty:      { vi: "Chưa có khung tin nào.", ja: "フレームはまだありません。" }
+frames.paused:     { vi: "Đang tạm dừng — khung tin mới không hiện thêm.", ja: "一時停止中 — 新しいフレームは表示されません。" }
+frames.unknown_device: { vi: "Unit ID {id} không có ở {endpoint}", ja: "{endpoint} に Unit ID {id} はありません" }
+
+# ---------- thành phần giao diện dùng chung (tools/web/ui.css) ----------
+ui.search:               { vi: "Tìm thiết bị…",      ja: "機器を検索…" }
+ui.all_devices:          { vi: "Tất cả thiết bị",    ja: "すべての機器" }
+ui.no_match:             { vi: "Không có thiết bị nào khớp.", ja: "該当する機器はありません。" }
+ui.gateway:              { vi: "Gateway {endpoint}", ja: "ゲートウェイ {endpoint}" }
+ui.direct:               { vi: "TCP trực tiếp {endpoint}", ja: "TCP 直結 {endpoint}" }
+ui.serial_bus:           { vi: "Bus RS-485 {endpoint}", ja: "RS-485 バス {endpoint}" }
+ui.snmp_agent:           { vi: "SNMP {endpoint}",     ja: "SNMP {endpoint}" }
+ui.bacnet_ip:            { vi: "BACnet/IP {endpoint}", ja: "BACnet/IP {endpoint}" }
+ui.device_id:            { vi: "id {id}",            ja: "ID {id}" }
+ui.n_points:             { vi: "{n} điểm",           ja: "{n} 点" }
+ui.col_point:            { vi: "Điểm đo",            ja: "計測点" }
+ui.col_register:         { vi: "Địa chỉ điểm",       ja: "アドレス" }
+ui.col_value:            { vi: "Giá trị",            ja: "値" }
+ui.col_trend:            { vi: "Xu hướng",           ja: "推移" }
+ui.col_updated:          { vi: "Cập nhật",           ja: "更新" }
+ui.col_status:           { vi: "Trạng thái",         ja: "状態" }
+ui.col_control:          { vi: "Điều khiển",         ja: "操作" }
+ui.col_limits:           { vi: "Giới hạn ghi",       ja: "書き込み制限" }
+ui.col_time:             { vi: "Giờ",                ja: "時刻" }
+ui.col_device:           { vi: "Thiết bị",           ja: "機器" }
+ui.col_function:         { vi: "Lệnh",               ja: "機能" }
+ui.col_summary:          { vi: "Nội dung",           ja: "内容" }
+ui.col_result:           { vi: "Kết quả",            ja: "結果" }
+ui.status_ok:            { vi: "Bình thường",        ja: "正常" }
+ui.more_values:          { vi: "+{n} điểm khác",     ja: "他 {n} 点" }
+ui.select_frame:         { vi: "Chọn một dòng ở bảng bên trái để xem từng byte gửi và nhận.",
+                           ja: "左の一覧から行を選択すると、送受信のバイト列を表示します。" }
+ui.resize:               { vi: "Kéo để đổi chiều cao · nhấp đúp để về tự động", ja: "ドラッグで高さを変更 · ダブルクリックで自動に戻す" }
+dash.help:               { vi: "Phím R: đọc · /: tìm thiết bị · lệnh ghi đi qua rào chắn và được đọc lại xác nhận",
+                           ja: "R キー：読み取り · /：機器を検索 · 書き込みはガード経由で、読み戻して確認します" }
+dash.read_all:           { vi: "Đọc tất cả",         ja: "すべて読み取り" }
+dash.read_device:        { vi: "Đọc thiết bị này",   ja: "この機器を読み取り" }
+dash.read_point:         { vi: "Đọc",                ja: "読取" }
+dash.read_point_hint:    { vi: "Gửi một yêu cầu đọc riêng điểm này", ja: "この計測点だけ読み取り要求を送信" }
+dash.reading:            { vi: "Đang đọc…",          ja: "読み取り中…" }
+dash.read_done:          { vi: "Lượt vừa đọc: {ok}/{n} điểm OK · {ms} ms", ja: "直近の読み取り：{n} 点中 {ok} 点正常 · {ms} ms" }
+dash.never_read:         { vi: "Chưa đọc lần nào — bấm Đọc (hoặc phím R) để gửi yêu cầu tới thiết bị",
+                           ja: "まだ読み取っていません — 「読み取り」（R キー）で機器に要求を送信します" }
+dash.auto:               { vi: "Tự đọc",             ja: "自動読み取り" }
+dash.auto_off:           { vi: "Tắt",                ja: "オフ" }
+dash.auto_every:         { vi: "mỗi {s} giây",       ja: "{s} 秒ごと" }
+simui.auto:              { vi: "Tự thay đổi",        ja: "自動変化" }
+simui.auto_off:          { vi: "Tắt — chỉ đặt bằng tay", ja: "オフ（手動のみ）" }
+simui.auto_hint:         { vi: "Điểm có biên độ dao động (sim.noise) tự đổi quanh giá trị đặt gần nhất; điểm client ghi được giữ nguyên",
+                           ja: "変動幅（sim.noise）のある計測点は、直近の設定値を中心に自動で変化します。クライアント書き込み可の点は変化しません" }
+simui.set_hint:          { vi: "Bấm ✎ để đặt giá trị theo đơn vị kỹ thuật · Enter lưu · Esc hủy", ja: "✎ で工学単位の値を設定 · Enter 保存 · Esc 取消" }
+
+# ---------- icon, thu/mở cột, sửa tại chỗ ----------
+ui.toggle_side:          { vi: "Thu / mở danh sách thiết bị (phím [)", ja: "機器一覧の表示／非表示（[ キー）" }
+ui.help:                 { vi: "Hướng dẫn (phím ?)",  ja: "ガイド（? キー）" }
+ui.close:                { vi: "Đóng (Esc)",          ja: "閉じる（Esc）" }
+ui.edit:                 { vi: "Sửa giá trị",         ja: "値を編集" }
+ui.relinquish:           { vi: "Nhả lệnh (relinquish): trả quyền cho mức ưu tiên thấp hơn", ja: "指令を解除（relinquish）：下位の優先度に戻す" }
+ui.save:                 { vi: "Lưu (Enter)",         ja: "保存（Enter）" }
+ui.cancel:               { vi: "Hủy (Esc)",           ja: "キャンセル（Esc）" }
+ui.oid_title:            { vi: "OID: địa chỉ của một giá trị trong cây MIB của thiết bị SNMP (chỉ đọc)",
+                           ja: "OID：SNMP 機器の MIB ツリー内での値の位置（読み出し専用）" }
+ui.bacnet_title:         { vi: "Đối tượng BACnet: loại,số (analog-input = số đo, analog-value / binary-value = giá trị điều khiển)",
+                           ja: "BACnet オブジェクト：種別,番号（analog-input＝計測値、analog-value／binary-value＝制御値）" }
+ui.priority_title:       { vi: "Ghi ở mức ưu tiên {priority} (1 cao nhất – 16 thấp nhất); xong việc thì nhả lệnh",
+                           ja: "優先度 {priority} で書き込み（1 が最高、16 が最低）。終わったら指令を解除します" }
+ui.hr_title:             { vi: "HR = Holding Register: thanh ghi đọc và ghi được (đọc bằng FC03, ghi bằng FC06/FC16)",
+                           ja: "HR = 保持レジスタ（Holding Register）：読み書き可能（FC03 で読み出し、FC06／FC16 で書き込み）" }
+ui.ir_title:             { vi: "IR = Input Register: thanh ghi chỉ đọc, thường là số đo (đọc bằng FC04)",
+                           ja: "IR = 入力レジスタ（Input Register）：読み出し専用、主に計測値（FC04 で読み出し）" }
+
+# ---------- khung hướng dẫn cho người mới (nút ?, tự hiện lần đầu mở trang) ----------
+help.steps:              { vi: "Thao tác",            ja: "操作手順" }
+help.terms:              { vi: "Thuật ngữ",           ja: "用語" }
+help.keys:               { vi: "Phím tắt",            ja: "ショートカット" }
+help.sim_title:          { vi: "Hướng dẫn nhanh — Simulator", ja: "クイックガイド — シミュレーター" }
+help.sim_intro:          { vi: "Trang này là thiết bị giả. Bạn quyết định thiết bị báo giá trị gì; client (trang collector hoặc dự án edge của bạn) đọc qua Modbus sẽ thấy đúng giá trị đó.",
+                           ja: "このページは模擬機器です。機器が返す値をここで決めます。Modbus で読み取るクライアント（コレクターや開発中のエッジ）には、その値がそのまま見えます。" }
+help.sim_step1:          { vi: "Chọn thiết bị ở cột trái, hoặc \"Tất cả thiết bị\". Nút ☰ trên cùng để thu gọn hoặc mở lại cột này.",
+                           ja: "左の一覧で機器（または「すべての機器」）を選びます。上部の ☰ で一覧を折りたたみ／再表示できます。" }
+help.sim_step2:          { vi: "Bấm ✎ cạnh giá trị, nhập số theo đơn vị kỹ thuật (V, A, °C…) rồi Enter để đặt; Esc để hủy.",
+                           ja: "値の横の ✎ を押し、工学単位（V、A、°C など）で数値を入力して Enter で設定、Esc で取り消します。" }
+help.sim_step3:          { vi: "Muốn giá trị tự dao động như thiết bị thật, chọn Tự thay đổi 5 / 10 / 30 giây. Chọn Tắt thì giá trị đứng yên.",
+                           ja: "実機のように値を変動させるには「自動変化」で 5／10／30 秒を選びます。オフにすると値は固定されます。" }
+help.sim_step4:          { vi: "Mở trang collector (mặc định cổng 8080) để đọc thử và xem từng byte gửi và nhận.",
+                           ja: "コレクターのページ（既定はポート 8080）で読み取りを試し、送受信のバイト列を確認します。" }
+help.sim_keys:           { vi: "/ tìm thiết bị · [ thu/mở danh sách · ? hướng dẫn · Enter lưu · Esc hủy",
+                           ja: "/ 機器を検索 · [ 一覧の表示切替 · ? ガイド · Enter 保存 · Esc 取消" }
+help.dash_title:         { vi: "Hướng dẫn nhanh — Bảng số liệu", ja: "クイックガイド — 計測値モニター" }
+help.dash_intro:         { vi: "Trang này là client, giống edge: gửi yêu cầu Modbus tới thiết bị và hiện kết quả. Trang không tự đọc — mỗi lần bấm là đúng một lượt yêu cầu.",
+                           ja: "このページはエッジと同じクライアントです。機器に Modbus 要求を送り、結果を表示します。自動では読み取らず、押すたびに 1 回だけ要求します。" }
+help.dash_step1:         { vi: "Chọn thiết bị ở cột trái (chấm xanh: bình thường, vàng: lỗi đọc, đỏ: có cảnh báo). Nút ☰ để thu/mở cột.",
+                           ja: "左の一覧で機器を選びます（緑：正常、黄：読み取りエラー、赤：警報あり）。☰ で一覧を折りたたみます。" }
+help.dash_step2:         { vi: "Bấm \"Đọc\" (phím R) để đọc thiết bị đang chọn; icon ⟳ trên từng dòng đọc riêng một điểm.",
+                           ja: "「読み取り」（R キー）で選択中の機器を読み取ります。各行の ⟳ はその計測点だけを読み取ります。" }
+help.dash_step3:         { vi: "Điểm ghi được có icon ✎: bấm để chọn giá trị; lệnh ghi đi qua rào chắn và được đọc lại xác nhận.",
+                           ja: "書き込み可能な計測点には ✎ があります。押して値を選ぶと、ガード経由で書き込み、読み戻して確認します。" }
+help.dash_step4:         { vi: "Thẻ Khung tin bên dưới: mỗi dòng là một cặp hỏi/đáp; bấm một dòng để xem từng byte và cách giải mã.",
+                           ja: "下の「Modbus フレーム」は 1 行が要求と応答の 1 組です。行を押すとバイト列と解読内容を表示します。" }
+help.dash_keys:          { vi: "R đọc · / tìm thiết bị · [ thu/mở danh sách · ? hướng dẫn · Enter lưu · Esc hủy",
+                           ja: "R 読み取り · / 機器を検索 · [ 一覧の表示切替 · ? ガイド · Enter 保存 · Esc 取消" }
+help.term_hr:            { vi: "HR",                  ja: "HR" }
+help.def_hr:             { vi: "Holding Register — thanh ghi đọc và ghi được (FC03 đọc, FC06/FC16 ghi). Thường là cài đặt, lệnh điều khiển; một số hãng đặt cả số đo ở đây.",
+                           ja: "保持レジスタ — 読み書き可能（FC03 で読み出し、FC06／FC16 で書き込み）。主に設定値や制御指令。計測値を置くメーカーもあります。" }
+help.term_ir:            { vi: "IR",                  ja: "IR" }
+help.def_ir:             { vi: "Input Register — thanh ghi chỉ đọc (FC04), thường là số đo. HR 100 và IR 100 là hai ô khác nhau.",
+                           ja: "入力レジスタ — 読み出し専用（FC04）、主に計測値。HR 100 と IR 100 は別のアドレスです。" }
+help.term_fc:            { vi: "FC",                  ja: "FC" }
+help.def_fc:             { vi: "Mã lệnh Modbus: 03 đọc HR · 04 đọc IR · 06 ghi một HR · 16 ghi nhiều HR. Thiết bị từ chối thì trả mã lệnh + 0x80 kèm mã lỗi (ví dụ 83 02).",
+                           ja: "Modbus の機能コード：03 HR 読み出し · 04 IR 読み出し · 06 HR 1 個書き込み · 16 HR 複数書き込み。拒否時は機能コード＋0x80 と例外コード（例：83 02）。" }
+help.term_unit:          { vi: "Unit ID",             ja: "Unit ID" }
+help.def_unit:           { vi: "Số hiệu thiết bị (device_id). Sau một gateway RS-485, mỗi thiết bị có một số riêng từ 1 đến 247.",
+                           ja: "機器番号（device_id）。RS-485 ゲートウェイ配下では機器ごとに 1～247 の番号を持ちます。" }
+help.term_order:         { vi: "Byte order",          ja: "バイト順" }
+help.def_order:          { vi: "Thứ tự 4 byte của số 32 bit (ABCD, CDAB, BADC, DCBA). Cấu hình sai thì đọc ra số vô nghĩa mà không có lỗi nào.",
+                           ja: "32 ビット値の 4 バイトの並び（ABCD、CDAB、BADC、DCBA）。設定を誤るとエラーなしで無意味な値になります。" }
+help.term_scale:         { vi: "Hệ số",               ja: "係数" }
+help.def_scale:          { vi: "Giá trị thật = số nguyên trong thanh ghi × hệ số. Ví dụ 2305 × 0.1 = 230,5 V.",
+                           ja: "実際の値 ＝ レジスタの整数 × 係数。例：2305 × 0.1 ＝ 230.5 V。" }
+help.term_oid:           { vi: "SNMP / OID",          ja: "SNMP／OID" }
+help.def_oid:            { vi: "UPS, PDU thường đọc qua SNMP (UDP 161). Mỗi giá trị có một OID, ví dụ UPS-MIB 1.3.6.1.2.1.33. Chỉ đọc.",
+                           ja: "UPS や PDU は SNMP（UDP 161）で読むことが多い。値ごとに OID があります（例：UPS-MIB 1.3.6.1.2.1.33）。読み出し専用。" }
+help.term_priority:      { vi: "BACnet / mức ưu tiên", ja: "BACnet／優先度" }
+help.def_priority:       { vi: "Điều hòa, BMS dùng BACnet/IP (UDP 47808). Lệnh ghi kèm mức ưu tiên 1–16; lệnh ưu tiên cao nhất thắng. Nhả lệnh (relinquish) để trả quyền lại; không ai ra lệnh thì thiết bị dùng giá trị mặc định — giá trị đặt trên trang simulator.",
+                           ja: "空調や BMS は BACnet/IP（UDP 47808）を使います。書き込みには優先度 1～16 を付け、最も高い優先度の指令が有効です。解除（relinquish）で権限を戻し、指令がなければ機器は既定値（シミュレーター画面で設定する値）を使います。" }
+help.term_gateway:       { vi: "Gateway",             ja: "ゲートウェイ" }
+help.def_gateway:        { vi: "Thiết bị chuyển Modbus TCP sang RS-485. Nhiều thiết bị phía sau dùng chung một địa chỉ IP, phân biệt bằng Unit ID.",
+                           ja: "Modbus TCP を RS-485 に変換する機器。配下の複数機器は同じ IP を共有し、Unit ID で区別します。" }

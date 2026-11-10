@@ -8,9 +8,13 @@
   POST   /api/state        {"bess-01.muc_pin": 15.5, ...}  đặt nhiều điểm; một điểm sai thì không đổi gì
   GET    /api/writes       nhật ký lệnh ghi Modbus; lọc bằng ?point=...&since=<seq>
   DELETE /api/writes       xóa nhật ký
+  GET    /api/frames       khung tin thô hỏi/đáp; lọc ?device=...&function=3&errors=1&since=<seq>&limit=N
+  DELETE /api/frames       xóa khung tin
   POST   /api/reset        về giá trị khởi đầu và xóa nhật ký
+  POST   /api/auto         {"interval": 5} tự thay đổi giá trị mỗi 5 giây; {"interval": 0} chỉ đặt bằng tay
   GET    /i18n.json        từ điển song ngữ vi/ja cho trang điều khiển
   GET    /i18n.js          mã song ngữ dùng chung (i18n/i18n.js)
+  GET    /ui.css, /ui.js   giao diện dùng chung (tools/web/)
 
 Lỗi trả về gồm error (tiếng Việt), code và params (để trang web dịch theo ngôn ngữ người dùng).
 """
@@ -22,6 +26,7 @@ from i18n import SCRIPT, ApiError, by_language
 from sim_state import BadValue, SimState, UnknownPoint
 
 PAGE = Path(__file__).with_name("control.html")
+WEB = Path(__file__).resolve().parents[1] / "web"     # giao diện dùng chung với trang collector: ui.css, ui.js
 
 
 class Control(BaseHTTPRequestHandler):
@@ -49,10 +54,14 @@ class Control(BaseHTTPRequestHandler):
             self.reply(200, PAGE.read_bytes(), "text/html; charset=utf-8")
         elif url.path == "/i18n.json":
             self.reply(200, by_language())
+        elif url.path == "/ui.css":
+            self.reply(200, (WEB / "ui.css").read_bytes(), "text/css; charset=utf-8")
+        elif url.path == "/ui.js":
+            self.reply(200, (WEB / "ui.js").read_bytes(), "text/javascript; charset=utf-8")
         elif url.path == "/i18n.js":
             self.reply(200, SCRIPT.read_bytes(), "text/javascript; charset=utf-8")
         elif url.path == "/api/state":
-            self.reply(200, {"points": self.state.snapshot()})
+            self.reply(200, {"points": self.state.snapshot(), "auto": self.state.auto})
         elif url.path == "/api/writes":
             q = parse_qs(url.query)
             try:
@@ -61,6 +70,16 @@ class Control(BaseHTTPRequestHandler):
                 return self.reply(400, {"ok": False, **ApiError("api.bad_since").as_json()})
             point = q["point"][0] if "point" in q else None
             self.reply(200, {"writes": self.state.writes(point, since)})
+        elif url.path == "/api/frames":
+            q = {k: v[0] for k, v in parse_qs(url.query).items()}
+            try:
+                since = int(q["since"]) if "since" in q else None
+                limit = int(q["limit"]) if "limit" in q else None
+                function = int(q["function"]) if "function" in q else None
+            except ValueError:
+                return self.reply(400, {"ok": False, **ApiError("api.bad_frames_query").as_json()})
+            self.reply(200, {"frames": self.state.frames.query(
+                since, limit, q.get("device"), function, q.get("errors") in ("1", "true"))})
         else:
             self.not_found()
 
@@ -69,6 +88,8 @@ class Control(BaseHTTPRequestHandler):
         if path == "/api/reset":
             self.state.reset()
             return self.reply(200, {"ok": True})
+        if path == "/api/auto":
+            return self.set_auto()
         if path != "/api/state":
             return self.not_found()
         try:
@@ -86,10 +107,28 @@ class Control(BaseHTTPRequestHandler):
         print(f"  << Đặt giá trị: {', '.join(f'{k} = {v}' for k, v in changed.items())}")
         self.reply(200, {"ok": True, "points": changed})
 
+    def set_auto(self):
+        try:
+            raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            interval = json.loads(raw).get("interval")
+            ok = isinstance(interval, int) and not isinstance(interval, bool) and (
+                interval == 0 or 1 <= interval <= SimState.AUTO_MAX)
+        except (ValueError, AttributeError):
+            ok = False
+        if not ok:
+            return self.reply(400, {"ok": False, **ApiError("api.bad_auto", max=SimState.AUTO_MAX).as_json()})
+        self.state.auto = interval
+        print(f"  ~~ Tự thay đổi giá trị: {'tắt (chỉ đặt bằng tay)' if not interval else f'mỗi {interval} giây'}")
+        self.reply(200, {"ok": True, "auto": interval})
+
     def do_DELETE(self):
-        if urlparse(self.path).path != "/api/writes":
+        path = urlparse(self.path).path
+        if path == "/api/writes":
+            self.state.clear_writes()
+        elif path == "/api/frames":
+            self.state.frames.clear()
+        else:
             return self.not_found()
-        self.state.clear_writes()
         self.reply(200, {"ok": True})
 
 

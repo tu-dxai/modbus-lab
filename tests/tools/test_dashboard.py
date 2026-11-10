@@ -2,7 +2,7 @@
 
 Không phải bài nghiệm thu MB-xx; chạy cùng simulator ở tests/conftest.py.
 """
-import json, urllib.error, urllib.request
+import json, time, urllib.error, urllib.request
 import pytest
 from collector import poll_once, serve
 from modbus_io import Connections
@@ -74,9 +74,28 @@ def test_web_blocked_write_returns_code_and_params(web):
     assert r["code"] == "write.not_allowed" and r["params"] == {"value": 5.0, "allowed": [0, 1]}
 
 
+def test_web_bacnet_write_then_relinquish(web):
+    code, r = call(web + "/api/write", {"point": "crah-01.diem_dat_nhiet", "value": 22})
+    assert code == 200 and r["after"] == pytest.approx(22)
+    code, r = call(web + "/api/relinquish", {"point": "crah-01.diem_dat_nhiet"})
+    assert code == 200 and r["ok"] and r["after"] == pytest.approx(18.0) and r["priority"] == 8
+
+
+def test_web_relinquish_blocked_for_modbus_point(web):
+    code, r = call(web + "/api/relinquish", {"point": "bess-01.che_do"})
+    assert code == 403 and r["blocked"] and r["code"] == "write.not_bacnet"
+
+
 def test_web_malformed_request(web):
     code, r = call(web + "/api/write", {"diem": "x"})
     assert code == 400 and not r["ok"] and r["code"] == "api.bad_write_request"
+
+
+def test_web_serves_shared_stylesheet(web):
+    r = urllib.request.urlopen(web + "/ui.css", timeout=3)
+    assert "text/css" in r.headers["Content-Type"] and ".workspace" in r.read().decode()
+    r = urllib.request.urlopen(web + "/ui.js", timeout=3)
+    assert "javascript" in r.headers["Content-Type"] and "function renderSidebar" in r.read().decode()
 
 
 def test_web_serves_dictionary(web):
@@ -93,3 +112,52 @@ def test_web_points_carry_bilingual_labels(web):
     assert set(bess["label"]) == {"vi", "ja"}
     assert all(set(p["label"]) == {"vi", "ja"} for p in bess["points"])
     assert all(set(a["message"]) == {"vi", "ja"} for a in s["alert_rules"])
+
+
+# ---------- đọc khi bấm nút (không tự đọc định kỳ) ----------
+def test_web_read_all_on_request(cfg, web):
+    _, before = call(web + "/api/points")
+    code, r = call(web + "/api/read", {})
+    total = sum(len(d["points"]) for d in cfg["devices"])
+    assert code == 200 and r["ok"] and r["read"] == total and r["ok_count"] == total and r["ms"] >= 0
+    assert r["snapshot"]["status"]["round"] == before["status"]["round"] + 1
+
+
+def test_web_read_one_device(web):
+    code, r = call(web + "/api/read", {"device": "bess-01"})
+    assert code == 200 and r["read"] == 3
+    assert r["snapshot"]["points"]["bess-01.muc_pin"]["value"] == pytest.approx(80.0)
+
+
+def test_web_read_one_point(web):
+    code, r = call(web + "/api/read", {"point": "dong-ho-dien-01.dien_ap"})
+    assert code == 200 and r["read"] == 1
+
+
+@pytest.mark.parametrize("body", [{"device": "khong-co"}, {"point": "bess-01.khong_co"}])
+def test_web_read_unknown_target(web, body):
+    code, r = call(web + "/api/read", body)
+    assert code == 404 and r["code"] == "api.unknown_target"
+
+
+def test_web_no_background_reading_by_default(web):
+    _, a = call(web + "/api/points")
+    time.sleep(0.6)
+    _, b = call(web + "/api/points")
+    assert a["status"]["round"] == b["status"]["round"] and b["status"]["auto"] == 0
+
+
+def test_web_auto_reading_can_be_switched_on_and_off(web):
+    code, r = call(web + "/api/auto", {"interval": 1})
+    assert code == 200 and r["auto"] == 1
+    _, a = call(web + "/api/points")
+    time.sleep(1.6)
+    call(web + "/api/auto", {"interval": 0})
+    _, b = call(web + "/api/points")
+    assert b["status"]["round"] > a["status"]["round"] and b["status"]["auto"] == 0
+
+
+@pytest.mark.parametrize("interval", [-1, 0.5, 5000, "x"])
+def test_web_auto_rejects_bad_interval(web, interval):
+    code, r = call(web + "/api/auto", {"interval": interval})
+    assert code == 400 and r["code"] == "api.bad_auto"

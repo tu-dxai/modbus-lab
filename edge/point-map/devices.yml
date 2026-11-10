@@ -3,6 +3,7 @@
 #  Simulator dùng file này để giả lập; collector và write-service dùng để đọc, ghi.
 #  Thêm thiết bị mới = thêm một khối, không sửa code.
 #  label / message: tên hiển thị song ngữ vi và ja, bắt buộc cho mọi thiết bị, điểm và cảnh báo.
+#  sim: chỉ simulator dùng — base = giá trị khởi đầu; noise = biên độ dao động khi bật tự thay đổi giá trị.
 #
 #  Địa chỉ ở đây là địa chỉ THẬT tại site. Khi chạy lab (mặc định --env lab), từng địa chỉ
 #  được ánh xạ sang simulator theo environments/lab.yml; chỉ --env site mới kết nối địa chỉ thật.
@@ -15,6 +16,10 @@
 #  IP 10.20.0.x dưới đây là VÍ DỤ — thay bằng IP thật khi có sơ đồ mạng site.
 # =============================================================
 site: container-01
+
+# Địa chỉ của edge trên mạng BACnet/IP (IP/mặt nạ:cổng) — client BACnet của collector gửi đi từ đây.
+# VÍ DỤ — thay bằng IP thật của edge. Môi trường lab ghi đè bằng bacnet_client trong environments/lab.yml.
+bacnet: { client: "10.20.0.5/24:47808" }
 
 devices:
   - name: dong-ho-dien-01          # đồng hồ điện tủ phân phối, sau gateway RS-485
@@ -32,7 +37,7 @@ devices:
       - { name: cong_suat,   label: { vi: "Công suất",         ja: "電力" },
           table: holding, address: 2, type: float32, scale: 1,   unit: "W",  sim: { base: 2800,  noise: 60 } }
       - { name: nhiet_do_tu, label: { vi: "Nhiệt độ trong tủ", ja: "盤内温度" },
-          table: holding, address: 4, type: int16,   scale: 0.1, unit: "°C", sim: { base: 26.0,  noise: 0.3, drift: 0.4 } }
+          table: holding, address: 4, type: int16,   scale: 0.1, unit: "°C", sim: { base: 26.0,  noise: 0.3 } }
 
   - name: dong-ho-dien-02          # đồng hồ điện thứ hai, cùng bus RS-485 với dong-ho-dien-01
     label: { vi: "Đồng hồ điện tủ phân phối 02", ja: "分電盤 電力計 02" }
@@ -51,6 +56,24 @@ devices:
       - { name: nhiet_do_tu, label: { vi: "Nhiệt độ trong tủ", ja: "盤内温度" },
           table: holding, address: 4, type: int16,   scale: 0.1, unit: "°C", sim: { base: 25.0,  noise: 0.3 } }
 
+  - name: dong-ho-rs485-03         # đồng hồ nối thẳng RS-485 vào edge (cổng USB-RS485), không qua gateway
+    label: { vi: "Đồng hồ điện tủ phụ 03 (RS-485)", ja: "副分電盤 電力計 03（RS-485）" }
+    transport: rtu                 # Modbus RTU trên cổng serial; không có host/port
+    serial: { port: /dev/ttyUSB0, baudrate: 9600, parity: N, stop_bits: 1 }   # tra màn hình cài đặt thiết bị
+    device_id: 3                   # địa chỉ RTU trên bus, 1-247
+    byte_order: ABCD
+    timeout: 1                     # RS-485 9600 baud: một lệnh đọc ngắn mất vài chục ms
+    points:
+      - { name: dien_ap,     label: { vi: "Điện áp",           ja: "電圧" },
+          table: holding, address: 0, type: uint16,  scale: 0.1, unit: "V",  sim: { base: 231.0, noise: 1.5 } }
+      - { name: dong_dien,   label: { vi: "Dòng điện",         ja: "電流" },
+          table: holding, address: 1, type: uint16,  scale: 0.1, unit: "A",  sim: { base: 5.2,   noise: 0.4 } }
+      - { name: nhiet_do_tu, label: { vi: "Nhiệt độ trong tủ", ja: "盤内温度" },
+          table: holding, address: 4, type: int16,   scale: 0.1, unit: "°C", sim: { base: 24.0,  noise: 0.3 } }
+      - { name: che_do_dem,  label: { vi: "Chế độ đếm điện năng", ja: "電力量の計量モード" },
+          table: holding, address: 10, type: uint16, scale: 1,   unit: "",
+          writable: true, allowed: [0, 1], sim: { base: 0 } }
+
   - name: bess-01                  # pin lưu trữ, có cổng Ethernet riêng; hãng này đảo thứ tự word
     label: { vi: "Hệ thống pin lưu trữ 01", ja: "蓄電システム 01" }
     host: 10.20.0.30
@@ -67,8 +90,59 @@ devices:
           table: holding, address: 10,  type: uint16,  scale: 1,   unit: "",
           writable: true, allowed: [0, 1], sim: { base: 0 } }
 
+  - name: ups-01                   # UPS có card mạng SNMP; OID theo UPS-MIB chuẩn (RFC 1628)
+    label: { vi: "UPS 01", ja: "UPS 01" }
+    protocol: snmp                 # đọc bằng SNMP GET (Telegraf inputs.snmp ở edge); chỉ đọc
+    host: 10.20.0.40
+    port: 161                      # cổng chuẩn SNMP (UDP)
+    snmp: { version: 2c, community: public }   # tra cấu hình card mạng UPS; đổi community mặc định ở site thật
+    timeout: 2
+    points:
+      - { name: trang_thai_pin, label: { vi: "Trạng thái pin (2 = bình thường)", ja: "バッテリー状態（2 = 正常）" },
+          oid: 1.3.6.1.2.1.33.1.2.1.0, type: integer, unit: "", sim: { base: 2 } }            # upsBatteryStatus
+      - { name: muc_pin,        label: { vi: "Mức pin còn lại", ja: "バッテリー残量" },
+          oid: 1.3.6.1.2.1.33.1.2.4.0, type: integer, unit: "%", sim: { base: 100 } }         # upsEstimatedChargeRemaining
+      - { name: dien_ap_pin,    label: { vi: "Điện áp pin", ja: "バッテリー電圧" },
+          oid: 1.3.6.1.2.1.33.1.2.5.0, type: integer, scale: 0.1, unit: "V",
+          sim: { base: 545.0, noise: 1.5 } }                                                   # upsBatteryVoltage (0,1 V DC)
+      - { name: nhiet_do_pin,   label: { vi: "Nhiệt độ pin", ja: "バッテリー温度" },
+          oid: 1.3.6.1.2.1.33.1.2.7.0, type: integer, unit: "°C", sim: { base: 25, noise: 1 } } # upsBatteryTemperature
+      - { name: dien_ap_vao,    label: { vi: "Điện áp vào", ja: "入力電圧" },
+          oid: 1.3.6.1.2.1.33.1.3.3.1.3.1, type: integer, unit: "V", sim: { base: 230, noise: 2 } } # upsInputVoltage pha 1
+      - { name: nguon_ra,       label: { vi: "Nguồn ra (3 = lưới, 5 = pin)", ja: "出力電源（3 = 商用、5 = バッテリー）" },
+          oid: 1.3.6.1.2.1.33.1.4.1.0, type: integer, unit: "", sim: { base: 3 } }            # upsOutputSource
+      - { name: tai_ra,         label: { vi: "Tải đầu ra", ja: "出力負荷率" },
+          oid: 1.3.6.1.2.1.33.1.4.4.1.5.1, type: integer, unit: "%", sim: { base: 42, noise: 3 } } # upsOutputPercentLoad
+
+  - name: crah-01                  # điều hòa chính xác (CRAH) của dãy rack, BACnet/IP
+    label: { vi: "Điều hòa CRAH 01", ja: "空調機 CRAH 01" }
+    protocol: bacnet               # collector Python đọc/ghi (Telegraf không đọc BACnet)
+    host: 10.20.0.50
+    port: 47808                    # cổng chuẩn BACnet/IP (UDP, 0xBAC0)
+    device_instance: 5001          # số hiệu thiết bị BACnet — tra màn hình cài đặt / tài liệu tích hợp
+    timeout: 3
+    points:
+      - { name: nhiet_do_cap,   label: { vi: "Nhiệt độ gió cấp", ja: "給気温度" },
+          object: "analog-input,1", unit: "°C", sim: { base: 18.0, noise: 0.3 } }
+      - { name: nhiet_do_hoi,   label: { vi: "Nhiệt độ gió hồi", ja: "還気温度" },
+          object: "analog-input,2", unit: "°C", sim: { base: 28.0, noise: 0.4 } }
+      - { name: do_am_hoi,      label: { vi: "Độ ẩm gió hồi", ja: "還気湿度" },
+          object: "analog-input,3", unit: "%", sim: { base: 45.0, noise: 2.0 } }
+      - { name: trang_thai_quat, label: { vi: "Quạt đang chạy (1 = chạy)", ja: "ファン運転（1 = 運転）" },
+          object: "binary-input,1", unit: "", sim: { base: 1 } }
+      - { name: diem_dat_nhiet, label: { vi: "Điểm đặt nhiệt độ gió cấp", ja: "給気温度設定値" },
+          object: "analog-value,1", unit: "°C", writable: true, min: 16, max: 27, priority: 8,
+          sim: { base: 18.0 } }                                  # mức ưu tiên 8: điều khiển tự động (BMS/edge)
+      - { name: lenh_chay,      label: { vi: "Lệnh chạy (1) / dừng (0)", ja: "運転（1）／停止（0）指令" },
+          object: "binary-value,1", unit: "", writable: true, allowed: [0, 1], priority: 8,
+          sim: { base: 1 } }
+
 alerts:
   - { point: dong-ho-dien-01.nhiet_do_tu, above: 30.0,
       message: { vi: "Tủ điện quá nóng", ja: "盤内温度が高すぎます" } }
   - { point: bess-01.muc_pin, below: 20.0,
       message: { vi: "Pin sắp cạn", ja: "電池残量が少なくなっています" } }
+  - { point: ups-01.nguon_ra, above: 4,
+      message: { vi: "UPS đang chạy bằng pin", ja: "UPS がバッテリー運転中です" } }
+  - { point: crah-01.nhiet_do_cap, above: 27.0,
+      message: { vi: "Gió cấp quá nóng (vượt 27 °C theo ASHRAE)", ja: "給気温度が高すぎます（ASHRAE 推奨 27 °C 超）" } }

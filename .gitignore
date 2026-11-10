@@ -13,3 +13,8 @@ __pycache__/
 # Bí mật và cấu hình riêng từng máy
 .env
 .env.*
+
+# Nhật ký kiểm toán, cổng serial ảo... sinh ra khi chạy
+var/
+# Cấu hình Telegraf sinh từ Point Map (make telegraf)
+edge/collectors/telegraf/*.conf

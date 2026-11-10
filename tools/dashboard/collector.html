@@ -5,111 +5,118 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Modbus lab</title>
 <link rel="icon" href="data:,">
+<link rel="stylesheet" href="/ui.css">
 <style>
-  :root {
-    --bg: #f6f7f9; --card: #fff; --text: #1c2129; --muted: #6b7280; --line: #e5e7eb;
-    --ok: #15803d; --ok-bg: #dcfce7; --warn: #a16207; --warn-bg: #fef3c7;
-    --err: #b91c1c; --err-bg: #fee2e2; --accent: #2563eb; --spark: #94a3b8;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0f1218; --card: #181c24; --text: #e5e7eb; --muted: #9ca3af; --line: #2a303b;
-      --ok: #4ade80; --ok-bg: #14321f; --warn: #fbbf24; --warn-bg: #3a2c0b;
-      --err: #f87171; --err-bg: #3b1515; --accent: #60a5fa; --spark: #64748b;
-    }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
-               "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif; }
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; }
-  header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 16px; }
-  header.top h1 { font-size: 20px; margin: 0; margin-right: auto; }
-  header.top h1 .muted { font-weight: 400; margin-left: 6px; }
-  .pill { padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
-  .pill.ok { color: var(--ok); background: var(--ok-bg); }
-  .pill.warn { color: var(--warn); background: var(--warn-bg); }
-  .pill.err { color: var(--err); background: var(--err-bg); }
-  .muted { color: var(--muted); font-size: 13px; }
-  .langs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .langs button { border: 0; border-radius: 0; padding: 4px 10px; font-size: 13px; }
-  .langs button + button { border-left: 1px solid var(--line); }
-  .langs button.on { background: var(--accent); color: #fff; }
-  #alerts:empty { display: none; }
-  #alerts { margin-bottom: 16px; padding: 10px 14px; border-radius: 10px; background: var(--err-bg); color: var(--err); }
-  #alerts div + div { margin-top: 4px; }
-  #devices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-  .card > header { padding: 12px 16px; border-bottom: 1px solid var(--line); }
-  .card h2 { font-size: 16px; margin: 0 0 2px; }
-  .row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
-  .row:last-child { border-bottom: 0; }
-  .row.hot { background: var(--err-bg); }
-  .name { font-weight: 600; }
-  .meta { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
-  .val { text-align: right; white-space: nowrap; min-width: 110px; }
-  .num { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .unit { color: var(--muted); margin-left: 4px; }
-  .row.err .num, .note.err { color: var(--err); }
-  .row.hot .num { color: var(--err); }
-  .note { grid-column: 1 / -1; font-size: 13px; }
-  .note:empty { display: none; }
-  svg.spark { width: 110px; height: 30px; }
-  svg.spark polyline { fill: none; stroke: var(--spark); stroke-width: 1.5; }
-  .row.hot svg.spark polyline { stroke: var(--err); }
-  .ctl { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-  .ctl .lbl { color: var(--muted); font-size: 13px; margin-right: 4px; }
-  button, input { font: inherit; }
-  button { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
-  button:hover:not(:disabled) { border-color: var(--accent); }
-  button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button:disabled { opacity: .5; cursor: wait; }
-  input[type=number] { width: 110px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
-  footer { margin-top: 20px; }
-  a { color: var(--accent); }
-  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); max-width: calc(100% - 32px);
-           padding: 10px 16px; border-radius: 10px; font-weight: 500; box-shadow: 0 4px 20px rgba(0,0,0,.2); display: none; }
-  #toast.ok { display: block; color: var(--ok); background: var(--ok-bg); }
-  #toast.err { display: block; color: var(--err); background: var(--err-bg); }
-  @media (max-width: 480px) {
-    svg.spark { display: none; }
-    .row { grid-template-columns: 1fr auto; }
-  }
+  .grid td.ctl { white-space: nowrap; width: 1%; text-align: center; }
+  .rule { color: var(--muted); font-size: 11.5px; }
+  #lastread.ok { color: var(--ok); } #lastread.err { color: var(--err); }
+  #auto { padding: 3px 6px; font-size: 13px; }
+  .hint-row td { color: var(--muted); text-align: center; padding: 22px 12px; background: var(--panel-2); }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
-    <h1><span data-i18n="dash.title">Modbus lab</span><span id="site" class="muted"></span></h1>
+<div class="app">
+  <header class="topbar">
+    <button id="side-toggle" class="icon-btn" data-icon="sidebar" data-i18n-title="ui.toggle_side"></button>
+    <h1 data-i18n="dash.title">Modbus lab</h1>
+    <span id="site" class="ctx"></span>
+    <span class="spacer"></span>
+    <span id="info" class="ctx num"></span>
     <span id="conn" class="pill warn" data-i18n="dash.loading"></span>
-    <span id="info" class="muted"></span>
-    <div class="langs"><button data-lang="vi">Tiếng Việt</button><button data-lang="ja">日本語</button></div>
+    <div class="seg langs"><button data-lang="vi">Tiếng Việt</button><button data-lang="ja">日本語</button></div>
+    <button id="help-open" class="icon-btn" data-icon="help" data-i18n-title="ui.help"></button>
   </header>
-  <div id="alerts"></div>
-  <main id="devices"></main>
-  <footer class="muted"><span data-i18n="dash.footer"></span>
-    JSON: <a href="/api/points">/api/points</a></footer>
+  <div id="alerts" class="alertbar"></div>
+  <div class="workspace">
+    <aside class="side card">
+      <div class="search"><input id="q" class="field" type="search" autocomplete="off" data-i18n-placeholder="ui.search"></div>
+      <div id="devlist" class="list"></div>
+    </aside>
+    <section id="content" class="content">
+      <!-- thẻ trên: điểm đo -->
+      <div class="panel points card">
+      <div class="panel-head">
+        <h2 id="title"></h2><span id="sub" class="sub"></span>
+        <div class="tools">
+          <span id="lastread" class="small muted num"></span>
+          <label class="chk small"><span data-i18n="dash.auto"></span><select id="auto" class="field"></select></label>
+          <button id="read" class="btn primary" data-icon="read"><span id="read-label"></span></button>
+        </div>
+      </div>
+      <div class="scroll">
+        <table class="grid">
+          <thead><tr>
+            <th data-i18n="ui.col_point"></th>
+            <th class="r" data-i18n="ui.col_value"></th>
+            <th class="hide-sm" data-i18n="ui.col_trend"></th>
+            <th data-i18n="ui.col_status"></th>
+            <th class="hide-sm" data-i18n="ui.col_updated"></th>
+            <th data-i18n="ui.col_control"></th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="panel-foot" data-i18n="dash.help"></div>
+      </div>
+      <div id="resizer" class="resizer" data-i18n-title="ui.resize"></div>
+      <!-- thẻ dưới: khung tin collector gửi đi và nhận về -->
+      <div id="traffic" class="panel traffic card">
+        <div class="panel-head">
+          <h2><span data-i18n="frames.title"></span><span id="n-frames" class="count"></span></h2>
+          <div class="tools">
+            <select id="f-device" class="field"></select>
+            <select id="f-function" class="field">
+              <option value="" data-i18n="frames.all_functions"></option>
+              <option value="3">FC03</option><option value="4">FC04</option>
+              <option value="6">FC06</option><option value="16">FC16</option>
+            </select>
+            <label class="chk"><input type="checkbox" id="f-errors"><span data-i18n="frames.errors"></span></label>
+            <button id="f-pause" class="btn sm" data-icon="pause"><span data-i18n="frames.pause"></span></button>
+            <button id="f-clear" class="btn sm" data-icon="trash"><span data-i18n="frames.clear"></span></button>
+          </div>
+        </div>
+        <div id="f-paused" class="paused" hidden data-i18n="frames.paused"></div>
+        <div class="split">
+          <div class="scroll">
+            <table class="grid dense fixed">
+              <thead><tr>
+                <th class="c-seq">#</th><th class="c-time" data-i18n="ui.col_time"></th>
+                <th class="c-dev" data-i18n="ui.col_device"></th><th class="c-fc" data-i18n="ui.col_function"></th>
+                <th data-i18n="ui.col_summary"></th><th class="c-res" data-i18n="ui.col_result"></th>
+                <th class="c-ms r">ms</th>
+              </tr></thead>
+              <tbody id="frames"></tbody>
+            </table>
+          </div>
+          <div id="detail" class="detail"></div>
+        </div>
+      </div>
+    </section>
+  </div>
 </div>
-<div id="toast"></div>
+
+<div id="help" class="drawer-wrap" hidden>
+  <aside class="drawer" role="dialog" aria-modal="true">
+    <div class="drawer-head"><h2></h2><button class="icon-btn" data-icon="x" data-i18n-title="ui.close"></button></div>
+    <div class="drawer-body"></div>
+  </aside>
+</div>
 
 <script src="/i18n.js"></script>
+<script src="/ui.js"></script>
+<script src="/frames.js"></script>
 <script>
-const $ = (s) => document.querySelector(s);
-const SVG = 'http://www.w3.org/2000/svg';
-let built = '';                       // mô tả thiết bị + ngôn ngữ lần dựng trước; đổi thì dựng lại
-let last = null;                      // số liệu lần tải gần nhất, để vẽ lại ngay khi đổi ngôn ngữ
-let connState = null;                 // trạng thái kết nối, để dịch lại khi đổi ngôn ngữ
-const rows = {};                      // điểm -> các phần tử cần cập nhật
+let last = null;                      // số liệu lần tải gần nhất
+let flashKeys = new Set();            // điểm vừa được đọc, tô sáng một nhịp
+let reading = false, loadTimer = null;
+const AUTO_CHOICES = [0, 2, 5, 10];
+let built = '';                       // bố cục bảng lần dựng trước (thiết bị, ngôn ngữ, lựa chọn, ô tìm)
+let connState = null;
+let selected = selectedDevice();
+const rows = {};                      // điểm -> phần tử cần cập nhật mỗi lượt
 const labels = {};                    // điểm -> nhãn song ngữ
 
-function el(tag, cls, text) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
-const fmt = (v) => Number(v).toLocaleString(locale(), { maximumFractionDigits: 2 });
+const fmt = (v) => fmtNum(v, 2);
 
 function rulesText(rules, key) {
   return rules.filter(a => a.point === key)
@@ -117,165 +124,290 @@ function rulesText(rules, key) {
     .join(', ');
 }
 
+function deviceState(s, d) {
+  const firing = s.alert_rules.filter(a => a.firing && a.point.startsWith(d.name + '.')).length;
+  const errors = d.points.filter(p => s.points[p.key] && !s.points[p.key].ok).length;
+  return { firing, errors, dot: firing ? 'err' : errors ? 'warn' : s.status.round ? 'ok' : 'idle' };
+}
+
+function siteSuffix(d) {
+  return d.site_endpoint !== d.endpoint ? t('dash.site_suffix', { site: d.site_endpoint }) : '';
+}
+
+function pointRow(s, d, p) {
+  labels[p.key] = p.label;
+  const tr_ = el('tr');
+  const name = el('td', 'label-cell');
+  const rule = rulesText(s.alert_rules, p.key);
+  const code = el('div', 'code', `${p.name} · `);
+  code.append(pointRef(p, d.protocol));
+  if (rule) code.append(el('span', 'rule', ` · ${rule}`));
+  name.append(el('div', 'main', tr(p.label)), code);
+  const value = el('td', 'r');
+  const cell = el('span', 'val-cell');
+  const num = el('span', 'value', '—');
+  cell.append(num);
+  if (p.writable) {                                 // điểm ghi được: ✎ mở ô chọn giá trị ngay tại chỗ
+    const edit = iconButton('pencil', 'ui.edit', 'edit');
+    edit.onclick = () => openEditor(value, {
+      value: last.points[p.key] && last.points[p.key].value, choices: p.allowed, unit: p.unit,
+      onSave: v => writeValue(p.key, v),
+    });
+    cell.append(edit);
+    if (p.priority) {                               // BACnet: nhả lệnh ở mức ưu tiên của điểm
+      const rel = iconButton('undo', 'ui.relinquish', 'edit');
+      rel.onclick = () => relinquish(p.key, p.priority).catch(e => e.message && toast(e.message, 'err'));
+      cell.append(rel);
+    }
+  }
+  value.append(cell);
+  const trend = el('td', 'hide-sm');
+  const spark = newSpark();
+  trend.append(spark);
+  const status = el('td');
+  const at = el('td', 'hide-sm muted num small');
+  const ctl = el('td', 'ctl');
+  const r = { tr: tr_, num, spark, status, at, unit: p.unit };
+  const one = iconButton('read', 'dash.read_point_hint');
+  one.onclick = () => readNow({ point: p.key });
+  ctl.append(one);
+  tr_.append(name, value, trend, status, at, ctl);
+  rows[p.key] = r;
+  return tr_;
+}
+
 function build(s) {
-  const main = $('#devices');
-  main.replaceChildren();
   for (const k in rows) delete rows[k];
-  for (const d of s.devices) {
-    const card = el('section', 'card');
-    const h = el('header');
-    const site = d.site_endpoint !== d.endpoint ? t('dash.site_suffix', { site: d.site_endpoint }) : '';
-    h.append(el('h2', '', tr(d.label)),
-             el('div', 'meta', `${d.name} · ` + t('common.device_meta',
-               { endpoint: d.endpoint, site, id: d.device_id, order: d.byte_order })));
-    card.append(h);
-    for (const p of d.points) {
-      labels[p.key] = p.label;
-      const row = el('div', 'row');
-      const info = el('div');
-      const rule = rulesText(s.alert_rules, p.key);
-      info.append(el('div', 'name', tr(p.label)),
-                  el('div', 'meta', `${p.name} · ${p.table} ${p.address} · ${p.type}${rule ? ' · ' + rule : ''}`));
-      const spark = document.createElementNS(SVG, 'svg');
-      spark.setAttribute('class', 'spark');
-      spark.setAttribute('viewBox', '0 0 110 30');
-      spark.setAttribute('preserveAspectRatio', 'none');
-      const line = document.createElementNS(SVG, 'polyline');
-      spark.append(line);
-      const val = el('div', 'val');
-      const num = el('span', 'num', '—');
-      val.append(num, el('span', 'unit', p.unit));
-      const note = el('div', 'note');
-      row.append(info, spark, val, note);
-      const r = { row, num, note, line, buttons: [] };
-      if (p.writable) row.append(controls(p, r));
-      rows[p.key] = r;
-      card.append(row);
+  const body = $('#rows');
+  body.replaceChildren();
+  const q = $('#q').value.trim();
+  const devs = selected === ALL ? s.devices.filter(d => deviceMatches(d, q)) : s.devices.filter(d => d.name === selected);
+  if (selected === ALL) {
+    $('#title').textContent = t('ui.all_devices');
+    $('#sub').textContent = t('ui.n_points', { n: devs.reduce((n, d) => n + d.points.length, 0) });
+    for (const d of devs) {
+      const head = el('tr', 'devrow');
+      const td = el('td', '', tr(d.label));
+      td.colSpan = 6;
+      td.append(el('span', 'meta', `${d.name} · ${d.endpoint}${siteSuffix(d)} · ${deviceShort(d.meta)}`));
+      head.append(td);
+      body.append(head, ...d.points.map(p => pointRow(s, d, p)));
     }
-    main.append(card);
+  } else if (devs.length) {
+    const d = devs[0];
+    $('#title').textContent = tr(d.label);
+    $('#sub').textContent = `${d.name} · ` + deviceMetaText(d, d.meta, siteSuffix(d));
+    body.append(...d.points.map(p => pointRow(s, d, p)));
+  }
+  if (!body.children.length) {
+    const tr_ = el('tr', 'empty-row'), td = el('td', '', t('ui.no_match'));
+    td.colSpan = 6;
+    tr_.append(td);
+    body.append(tr_);
   }
 }
 
-function controls(p, r) {
-  const ctl = el('div', 'ctl');
-  ctl.append(el('span', 'lbl', t('dash.write_label')));
-  if (p.allowed) {
-    for (const v of p.allowed) {
-      const b = el('button', '', String(v));
-      b.dataset.v = v;
-      b.onclick = () => write(p.key, v, r.buttons);
-      r.buttons.push(b);
-      ctl.append(b);
-    }
-  } else {
-    const inp = el('input');
-    inp.type = 'number'; inp.step = 'any';
-    const b = el('button', '', t('dash.write_button'));
-    b.onclick = () => inp.value !== '' && write(p.key, Number(inp.value), [b]);
-    r.buttons.push(b);
-    ctl.append(inp, b);
-  }
-  return ctl;
-}
-
-function sparkPoints(vals) {
-  const v = vals.filter(x => x !== null);
-  if (v.length < 2) return '';
-  const lo = Math.min(...v), hi = Math.max(...v), span = hi - lo || 1;
-  const step = 110 / (vals.length - 1);
-  return vals.map((x, i) => x === null ? null : `${(i * step).toFixed(1)},${(27 - (x - lo) / span * 24).toFixed(1)}`)
-             .filter(Boolean).join(' ');
+function sidebar(s) {
+  renderSidebar($('#devlist'), s.devices, {
+    selected, query: $('#q').value.trim(),
+    allMeta: `${Object.values(s.points).filter(p => p.ok).length}/${Object.keys(s.points).length}`,
+    itemDot: d => deviceState(s, d).dot,
+    itemMeta: d => { const st = deviceState(s, d); return st.firing ? `⚠ ${st.firing}` : deviceShort(d.meta); },
+    onSelect: name => { selected = name; selectDevice(name); render(); },
+  });
 }
 
 function setConn(kind, key) {
   connState = [kind, key];
-  const conn = $('#conn');
-  conn.className = 'pill ' + kind;
-  conn.textContent = t(key);
+  $('#conn').className = 'pill ' + kind;
+  $('#conn').textContent = t(key);
 }
 
 function update(s) {
   const firing = new Map(s.alert_rules.filter(a => a.firing).map(a => [a.point, a]));
-  let ok = 0, total = 0;
   for (const [key, r] of Object.entries(rows)) {
     const p = s.points[key];
-    total++;
-    if (p && p.ok) ok++;
-    r.num.textContent = !p ? '—' : p.ok ? fmt(p.value) : t('common.error');
-    r.row.classList.toggle('err', !!p && !p.ok);
-    r.row.classList.toggle('hot', firing.has(key));
-    if (p && !p.ok) { r.note.textContent = errText(p); r.note.className = 'note err'; }
-    else if (firing.has(key)) { r.note.textContent = '⚠ ' + tr(firing.get(key).message); r.note.className = 'note err'; }
-    else r.note.textContent = '';
-    r.line.setAttribute('points', sparkPoints(s.history[key] || []));
-    for (const b of r.buttons) if (b.dataset.v !== undefined)
-      b.classList.toggle('on', !!p && p.ok && Number(b.dataset.v) === p.value);
+    r.num.replaceChildren(document.createTextNode(!p ? '—' : p.ok ? fmt(p.value) : t('common.error')));
+    if (p && p.ok) r.num.append(el('span', 'unit', r.unit));
+    r.num.classList.toggle('err', !!p && !p.ok);
+    r.tr.classList.toggle('hot', firing.has(key));
+    if (p && !p.ok) r.status.replaceChildren(el('span', 'status-err', errText(p)));
+    else if (firing.has(key)) r.status.replaceChildren(el('span', 'badge err', '⚠ ' + tr(firing.get(key).message)));
+    else if (p) {                                   // bình thường: chỉ một chấm xanh, để chỗ bất thường nổi lên
+      const ok = el('span', 'dot');
+      ok.title = t('ui.status_ok');
+      r.status.replaceChildren(ok);
+    } else r.status.replaceChildren();
+    r.at.textContent = p ? p.at : '';
+    if (flashKeys.has(key)) { r.tr.classList.remove('flash'); void r.tr.offsetWidth; r.tr.classList.add('flash'); }
+    sparkline(r.spark, s.history[key] || []);
   }
 
   $('#alerts').replaceChildren(...[...firing.values()].map(a => {
-    const p = s.points[a.point];
-    return el('div', '', `⚠ ${tr(a.message)} — ${tr(labels[a.point]) || a.point} = ${fmt(p.value)} ${p.unit}`);
+    const p = s.points[a.point], dev = a.point.split('.')[0];
+    const d = s.devices.find(x => x.name === dev);
+    const b = el('button', '', `⚠ ${tr(a.message)} — ${tr(labels[a.point]) || a.point}` +
+      ` (${d ? tr(d.label) : dev}) = ${fmt(p.value)} ${p.unit}`);
+    b.onclick = () => { selected = dev; selectDevice(dev); render(); };
+    return b;
   }));
 
-  if (total && ok === total) setConn('ok', 'dash.status_ok');
+  flashKeys = new Set();
+  const ok = Object.values(s.points).filter(p => p.ok).length, total = Object.keys(s.points).length;
+  if (!s.status.round) setConn('idle', 'dash.status_idle');
+  else if (total && ok === total) setConn('ok', 'dash.status_ok');
   else if (ok > 0) setConn('warn', 'dash.status_partial');
-  else setConn('err', s.status.round ? 'dash.status_down' : 'dash.status_waiting');
+  else setConn('err', 'dash.status_down');
   $('#site').textContent = s.site ? t('dash.site', { site: s.site, env: s.env }) : '';
-  $('#info').textContent = s.status.round
-    ? t('dash.round', { round: s.status.round, at: s.status.at, ok, total }) : '';
+  $('#info').textContent = s.status.round ? t('dash.round', { round: s.status.round, at: s.status.at, ok, total }) : '';
+  const lr = $('#lastread');
+  lr.textContent = s.status.round ? t('dash.read_done', { n: s.status.read, ok: s.status.ok_count, ms: s.status.ms }) : '';
+  lr.className = 'small num ' + (!s.status.round ? 'muted' : s.status.ok_count === s.status.read ? 'ok' : 'err');
+  $('#read-label').textContent = t(reading ? 'dash.reading' : selected === ALL ? 'dash.read_all' : 'dash.read_device');
+  $('#read').disabled = reading;
+  $('#auto').value = String(s.status.auto);
+  if (!s.status.round && !$('#rows .hint-row')) {
+    const tr_ = el('tr', 'hint-row'), td = el('td', '', t('dash.never_read'));
+    td.colSpan = 6; tr_.append(td);
+    $('#rows').prepend(tr_);
+  } else if (s.status.round) $('#rows .hint-row')?.remove();
+}
+
+function fillAuto() {
+  $('#auto').replaceChildren(...AUTO_CHOICES.map(sec => {
+    const o = el('option', '', sec ? t('dash.auto_every', { s: sec }) : t('dash.auto_off'));
+    o.value = String(sec);
+    return o;
+  }));
+  if (last) $('#auto').value = String(last.status.auto);
 }
 
 function render() {
   if (!last) return;
-  const shape = JSON.stringify([I18N.lang, last.devices, last.alert_rules.map(a => [a.point, a.above, a.below])]);
-  if (shape !== built) { build(last); built = shape; }
+  if (selected !== ALL && !last.devices.some(d => d.name === selected)) selected = ALL;
+  const shape = JSON.stringify([I18N.lang, selected, $('#q').value, last.devices,
+                                last.alert_rules.map(a => [a.point, a.above, a.below])]);
+  if (shape !== built) { build(last); built = shape; fillFrameDevices(); }
+  sidebar(last);
   update(last);
 }
 
+// Không tự gọi định kỳ: chỉ tải khi mở trang, sau khi bấm đọc/ghi, hoặc theo nhịp tự đọc nếu bật.
 async function load() {
+  clearTimeout(loadTimer);
   try {
     const res = await fetch('/api/points', { cache: 'no-store' });
     last = await res.json();
     render();
+    await pollFrames();
+    if (last.status.auto) loadTimer = setTimeout(load, Math.max(1, last.status.auto) * 1000);
   } catch (e) {
     setConn('err', 'dash.status_no_collector');
   }
-  setTimeout(load, 2000);
 }
 
-let toastTimer;
-function toast(msg, kind) {
-  const box = $('#toast');
-  box.textContent = msg;
-  box.className = kind;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { box.className = ''; }, 5000);
+async function readNow(scope) {
+  if (reading) return;
+  reading = true;
+  if (last) update(last);
+  try {
+    const res = await fetch('/api/read', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify(scope) });
+    const j = await res.json();
+    if (!j.ok) { toast(t('dash.failed', { reason: errText(j) }), 'err'); return; }
+    last = j.snapshot;
+    flashKeys = new Set(scope.point ? [scope.point]
+      : last.devices.filter(d => !scope.device || d.name === scope.device).flatMap(d => d.points.map(p => p.key)));
+  } catch (e) {
+    setConn('err', 'dash.status_no_collector');
+  } finally {
+    reading = false;
+    render();
+    pollFrames().catch(() => {});
+  }
 }
 
-async function write(key, value, buttons) {
+function readCurrent() {
+  readNow(selected === ALL ? {} : { device: selected });
+}
+
+// Ghi từ ô sửa tại chỗ: hỏi xác nhận (lệnh ghi điều khiển thiết bị thật khi chạy --env site), ghi qua
+// rào chắn, rồi đọc lại thiết bị. Lỗi ném ra để hiện ngay dưới ô sửa.
+async function writeValue(key, value) {
   const point = tr(labels[key]) ? `${tr(labels[key])} (${key})` : key;
-  if (!confirm(t('dash.confirm_write', { point, value }))) return;
-  buttons.forEach(b => b.disabled = true);
+  if (!confirm(t('dash.confirm_write', { point, value }))) throw new Error('');
+  let j;
   try {
     const res = await fetch('/api/write', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ point: key, value }),
     });
-    const j = await res.json();
-    if (j.ok) toast(t('dash.write_ok', { point, before: fmt(j.before), after: fmt(j.after) }), 'ok');
-    else toast(t(j.blocked ? 'dash.blocked' : 'dash.failed', { reason: errText(j) }), 'err');
+    j = await res.json();
   } catch (e) {
-    toast(t('dash.status_no_collector'), 'err');
-  } finally {
-    buttons.forEach(b => b.disabled = false);
+    throw new Error(t('dash.status_no_collector'));
   }
+  if (!j.ok) {
+    pollFrames().catch(() => {});                  // lệnh bị thiết bị từ chối vẫn có khung tin để xem
+    throw new Error(t(j.blocked ? 'dash.blocked' : 'dash.failed', { reason: errText(j) }));
+  }
+  toast(t('dash.write_ok', { point, before: fmt(j.before), after: fmt(j.after) }), 'ok');
+  readNow({ device: key.split('.')[0] });          // cập nhật bảng bằng một lượt đọc thiết bị vừa ghi
 }
 
+// BACnet: nhả lệnh ở mức ưu tiên của điểm (qua rào chắn, có nhật ký kiểm toán), rồi đọc lại thiết bị.
+async function relinquish(key, priority) {
+  const point = tr(labels[key]) ? `${tr(labels[key])} (${key})` : key;
+  if (!confirm(t('dash.confirm_relinquish', { point, priority }))) return;
+  let j;
+  try {
+    const res = await fetch('/api/relinquish', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ point: key }),
+    });
+    j = await res.json();
+  } catch (e) {
+    throw new Error(t('dash.status_no_collector'));
+  }
+  if (!j.ok) throw new Error(t(j.blocked ? 'dash.blocked' : 'dash.failed', { reason: errText(j) }));
+  toast(t('dash.relinquish_ok', { point, priority, after: fmt(j.after) }), 'ok');
+  readNow({ device: key.split('.')[0] });
+}
+
+$('#q').oninput = render;
+$('#read').onclick = readCurrent;
+$('#auto').onchange = async () => {
+  const interval = Number($('#auto').value);
+  const res = await fetch('/api/auto', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ interval }) });
+  const j = await res.json();
+  if (!j.ok) toast(t('dash.failed', { reason: errText(j) }), 'err');
+  load();
+};
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); readCurrent(); }
+  if (e.key === '/') { e.preventDefault(); $('#q').focus(); }
+});
+window.onhashchange = () => { selected = selectedDevice(); render(); };
+
+initFrames({
+  devices: () => (last ? last.devices : []),
+  deviceName: name => { const d = last && last.devices.find(x => x.name === name); return d ? tr(d.label) || name : name; },
+  pointName: key => tr(labels[key]) || key,
+});
+initResizer('dashTrafficH');
 initI18n(() => {
   document.title = t('dash.title');
   if (connState) setConn(...connState);
+  fillAuto();
+  built = '';
   render();
+  fillFrameDevices();
+  renderFrames();
+  if (!$('#help').hidden) renderHelp('dash');
 }).then(() => {
+  initShell('dash');
+  fillAuto();
+  renderFrames();
   document.title = t('dash.title');
   load();
 });

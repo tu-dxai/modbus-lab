@@ -1,10 +1,12 @@
 """SIMULATOR — giả lập mọi thiết bị khai báo trong Point Map, giá trị do người kiểm thử điều khiển.
 
-Chạy:  make sim                      (giá trị đứng yên, đặt bằng trang http://localhost:5080 hoặc make set)
-       make sim ARGS=--noise        (thêm nhiễu và độ trôi theo mục sim: của từng điểm, để xem cảnh báo)
+Chạy:  make sim                      (giá trị chỉ đổi khi đặt bằng tay: trang http://localhost:5080 hoặc make set)
+       make sim ARGS="--auto 5"     (tự thay đổi mỗi 5 giây: dao động quanh giá trị đặt gần nhất, biên độ sim.noise)
 
-Mỗi địa chỉ host:port (sau khi áp môi trường, mặc định lab) là một Modbus TCP server riêng, giống site
-thật: mỗi gateway hoặc thiết bị TCP một IP. Thiết bị cùng host:port (sau một gateway) phân biệt bằng device_id.
+Mỗi địa chỉ (sau khi áp môi trường, mặc định lab) là một server riêng, giống site thật:
+  - Modbus TCP: mỗi gateway hoặc thiết bị TCP một host:port; thiết bị sau gateway phân biệt bằng device_id;
+  - Modbus RTU: mỗi bus RS-485 một cổng serial ảo (vserial.py), client mở đầu kia như cổng USB-RS485;
+  - SNMP: mỗi thiết bị một agent (snmp_agent.py); BACnet/IP: mỗi thiết bị một device (bacnet_device.py).
 
 Hai vai trò:
   1. Nguồn dữ liệu: mỗi điểm có một giá trị hiện tại (đơn vị kỹ thuật, ví dụ 231.5 V). Giá trị khởi đầu
@@ -19,11 +21,13 @@ Dùng API SimData/SimDevice của pymodbus 3.16 (API cũ sẽ bị gỡ ở bả
 """
 import argparse, asyncio, logging, threading, time, warnings
 from functools import partial
-from pymodbus.server import StartAsyncTcpServer
+from pymodbus import FramerType
+from pymodbus.server import StartAsyncSerialServer, StartAsyncTcpServer
 from pymodbus.simulator import DataType, SimData, SimDevice
 from codec import SIZE
-from point_map import DEFAULT_PATH, load_or_exit
+from point_map import DEFAULT_PATH, device_meta, load_or_exit, point_ref
 from sim_state import SimState, endpoint
+from vserial import VirtualSerial
 
 warnings.filterwarnings("ignore")
 logging.getLogger("pymodbus").setLevel(logging.CRITICAL)
@@ -60,18 +64,41 @@ class Simulator:
         self.state, self.control_url = state, control_url
 
 
-def start(cfg, noise=False, control_port=None, control_host="127.0.0.1") -> Simulator:
-    """Khởi động simulator chạy nền (dùng cho cả kiểm thử). control_port=0 để hệ điều hành chọn cổng."""
-    state = SimState(cfg, noise)
+def start(cfg, control_port=None, control_host="127.0.0.1", frames=500, auto=0) -> Simulator:
+    """Khởi động simulator chạy nền (dùng cho cả kiểm thử). control_port=0 để hệ điều hành chọn cổng.
+
+    frames: số cặp khung tin hỏi/đáp gần nhất được giữ lại để xem byte thô.
+    auto: giây giữa hai lần tự thay đổi giá trị; 0 = chỉ đặt bằng tay (đổi được lúc chạy qua /api/auto).
+    """
+    state = SimState(cfg, frames, auto)
+    threading.Thread(target=state.run_auto, daemon=True).start()
     by_endpoint: dict[str, list[dict]] = {}
     for d in cfg["devices"]:
         by_endpoint.setdefault(endpoint(d), []).append(d)
     for ep, devs in by_endpoint.items():
-        host, port = devs[0]["host"], devs[0]["port"]
         site_ep = devs[0].get("site_address", ep)
+        proto = devs[0].get("protocol", "modbus")
+        if proto == "snmp":                              # agent SNMP: mỗi thiết bị một địa chỉ riêng
+            from snmp_agent import start_agent
+            start_agent(state, devs[0])
+            continue
+        if proto == "bacnet":
+            from bacnet_device import start_device
+            start_device(state, devs[0])
+            continue
         devices = [build_device(d, state) for d in devs]
-        threading.Thread(target=partial(asyncio.run, StartAsyncTcpServer(
-            context=devices, address=(host, port), trace_pdu=state.tracer(ep, site_ep))), daemon=True).start()
+        hooks = {"trace_pdu": state.tracer(ep, site_ep)}
+        if devs[0].get("transport") == "rtu":            # bus RS-485: cổng serial ảo, client mở đầu kia
+            s = devs[0]["serial"]
+            line = VirtualSerial(s["port"])
+            server = StartAsyncSerialServer(context=devices, port=line.device_path, framer=FramerType.RTU,
+                                            baudrate=s["baudrate"], parity=s.get("parity", "N"),
+                                            stopbits=s.get("stop_bits", 1), bytesize=s.get("bytesize", 8),
+                                            trace_packet=state.frames.tracer(ep, site_ep, rtu=True), **hooks)
+        else:
+            server = StartAsyncTcpServer(context=devices, address=(devs[0]["host"], devs[0]["port"]),
+                                         trace_packet=state.frames.tracer(ep, site_ep), **hooks)
+        threading.Thread(target=partial(asyncio.run, server), daemon=True).start()
     control_url = None
     if control_port is not None:
         from sim_control import serve
@@ -81,28 +108,54 @@ def start(cfg, noise=False, control_port=None, control_host="127.0.0.1") -> Simu
     return Simulator(state, control_url)
 
 
+KIND = {"modbus": "Modbus TCP", "snmp": "SNMP", "bacnet": "BACnet/IP"}
+
+
+def banner(cfg) -> list[str]:
+    """Danh sách thiết bị in ra khi khởi động, nhóm theo địa chỉ; đủ mọi giao thức."""
+    def order(d):
+        m = device_meta(d)
+        return endpoint(d), m.get("id") or m.get("instance") or 0
+
+    lines, shown = [], None
+    for d in sorted(cfg["devices"], key=order):
+        ep, m = endpoint(d), device_meta(d)
+        if ep != shown:
+            shown = ep
+            kind = "Modbus RTU" if ep.startswith("rtu:") else KIND[m["protocol"]]
+            where = ep.removeprefix("rtu:")
+            lines.append(f"  {kind} {where}  (site {d.get('site_address', where).removeprefix('rtu:')})")
+        if m["protocol"] == "snmp":
+            info = f"SNMP v{m['version']}"
+        elif m["protocol"] == "bacnet":
+            info = f"device instance {m['instance']}"
+        else:
+            info = f"thiết bị {m['id']}, byte order {m['order']}"
+        lines.append(f"    {d['name']}  ({info})")
+        for p in d["points"]:
+            w = "  [ghi được]" if p.get("writable") else ""
+            lines.append(f"        {point_ref(d, p):34} {p['name']:16} {p.get('unit', '')}{w}")
+    return lines
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=DEFAULT_PATH)
     ap.add_argument("--env", default="lab", help="môi trường ánh xạ địa chỉ (environments/<env>.yml)")
-    ap.add_argument("--noise", action="store_true", help="thêm nhiễu và độ trôi (mục sim: trong Point Map)")
+    ap.add_argument("--auto", type=int, default=0,
+                    help="tự thay đổi giá trị mỗi N giây (1-3600); mặc định 0 = chỉ đặt bằng tay")
     ap.add_argument("--control-host", default="127.0.0.1", help="0.0.0.0 để điều khiển từ máy khác")
     ap.add_argument("--control-port", type=int, default=5080)
+    ap.add_argument("--frames", type=int, default=500, help="số cặp khung tin gần nhất giữ lại để xem")
     args = ap.parse_args()
     cfg = load_or_exit(args.config, args.env)
-    sim = start(cfg, args.noise, args.control_port, args.control_host)
-    print(f"Simulator site {cfg.get('site', '?')}, môi trường {args.env}"
-          f"{'  (có nhiễu)' if args.noise else '  (giá trị đứng yên)'}")
+    if not 0 <= args.auto <= SimState.AUTO_MAX:
+        ap.error(f"--auto phải từ 0 đến {SimState.AUTO_MAX}")
+    sim = start(cfg, args.control_port, args.control_host, args.frames, args.auto)
+    print(f"Simulator site {cfg.get('site', '?')}, môi trường {args.env}, "
+          f"{f'tự thay đổi mỗi {args.auto} giây' if args.auto else 'giá trị chỉ đổi khi đặt bằng tay'}")
     print(f"Điều khiển: {sim.control_url}  (trang web, API, hoặc make set P=... V=...)")
-    shown = None
-    for d in sorted(cfg["devices"], key=lambda d: (endpoint(d), d["device_id"])):
-        if endpoint(d) != shown:
-            shown = endpoint(d)
-            print(f"  Modbus TCP {shown}  (site {d.get('site_address', shown)})")
-        print(f"    thiết bị {d['device_id']}  {d['name']}  (byte order {d['byte_order']})")
-        for p in d["points"]:
-            w = "  [ghi được]" if p.get("writable") else ""
-            print(f"        {p['table']:8} ngăn {p['address']:<4} {p['name']:14} {p['type']:8} {p.get('unit', '')}{w}")
+    print("\n".join(banner(cfg)))
     print("Nhấn Ctrl+C để dừng.")
     try:
         while True:

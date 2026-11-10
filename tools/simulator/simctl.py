@@ -12,6 +12,9 @@ Dòng lệnh (make set / make writes / make reset gọi vào đây):
     simctl.py set <điểm> <giá trị> [<điểm> <giá trị> ...]
     simctl.py writes [--point điểm] [--since seq]
     simctl.py clear-writes
+    simctl.py frames [--device thiết-bị] [--function 3] [--errors] [--limit 20]   khung tin thô
+    simctl.py clear-frames
+    simctl.py auto [giây]     xem / đặt chế độ tự thay đổi giá trị (0 = chỉ đặt bằng tay)
     simctl.py reset
 """
 import argparse, json, os, sys, time, urllib.error, urllib.request
@@ -62,6 +65,13 @@ class SimControl:
     def set_many(self, values: dict) -> dict:
         return self._call("POST", "/api/state", values)["points"]
 
+    def auto(self) -> int:
+        """Chu kỳ tự thay đổi giá trị hiện tại (giây); 0 = chỉ đặt bằng tay."""
+        return self._call("GET", "/api/state")["auto"]
+
+    def set_auto(self, interval: int) -> None:
+        self._call("POST", "/api/auto", {"interval": interval})
+
     def reset(self) -> None:
         self._call("POST", "/api/reset", {})
 
@@ -69,6 +79,18 @@ class SimControl:
     def writes(self, point: str | None = None, since: int | None = None) -> list[dict]:
         q = {k: v for k, v in (("point", point), ("since", since)) if v is not None}
         return self._call("GET", "/api/writes" + (f"?{urlencode(q)}" if q else ""))["writes"]
+
+    def frames(self, device: str | None = None, function: int | None = None, errors: bool = False,
+               since: int | None = None, limit: int | None = None) -> list[dict]:
+        """Các cặp khung tin hỏi/đáp thô gần nhất, cũ trước mới sau (xem tools/simulator/frames.py)."""
+        q = {k: v for k, v in (("device", device), ("function", function), ("since", since), ("limit", limit))
+             if v is not None}
+        if errors:
+            q["errors"] = 1
+        return self._call("GET", "/api/frames" + (f"?{urlencode(q)}" if q else ""))["frames"]
+
+    def clear_frames(self) -> None:
+        self._call("DELETE", "/api/frames")
 
     def clear_writes(self) -> None:
         self._call("DELETE", "/api/writes")
@@ -103,7 +125,34 @@ def _print_writes(writes: list[dict]) -> None:
         arrow = (lambda p: f"{p['before']} -> {p['value']}") if w["accepted"] else \
                 (lambda p: f"định ghi {p['value']} (vẫn giữ {p['before']})")
         points = ", ".join(f"{p['key']}: {arrow(p)}" for p in w["points"]) or "không trúng điểm nào"
+        if w.get("function") == "bacnet-write":         # BACnet WriteProperty: đối tượng và mức ưu tiên
+            p = w["points"][0]
+            what = f"nhả lệnh (đang là {p['before']})" if p["value"] is None and w["accepted"] else arrow(p)
+            print(f"#{w['seq']:<4} {w['at']}  {target} BACnet {w['address']} ưu tiên {w.get('priority') or '-'}"
+                  f"  [{status}]  {p['key']}: {what}")
+            continue
         print(f"#{w['seq']:<4} {w['at']}  {target} ô {w['address']} {w['registers']}  [{status}]  {points}")
+
+
+def _print_frames(frames: list[dict]) -> None:
+    from i18n import t                                 # nhập muộn: chỉ dòng lệnh cần chữ tiếng Việt
+    if not frames:
+        print(t("frames.empty"))
+    for f in frames:
+        target = (f["device_label"] or {}).get("vi") or f["device"] \
+            or t("frames.unknown_device", id=f["device_id"], endpoint=f["site_endpoint"])
+        print(f"#{f['seq']:<5} {f['at'][11:]}  {target} @ {f['site_endpoint']} · {t(f['fc_key'])} · {f['ms']} ms")
+        for label, part in ((t("frames.sent"), f["request"]), (t("frames.received"), f["response"])):
+            hexs = " | ".join(x["hex"] for x in part["fields"])
+            s = part["summary"]
+            print(f"  {label:<5} {hexs}      {t(s['key'], **s['params'])}")
+            print(f"  {'':<5} {' | '.join(t('frame.f.' + x['name']) for x in part['fields'])}")
+        for v in f["values"]:
+            key = "frame.explain_16" if len(v["hex"].split()) == 2 else "frame.explain_32"
+            name = (v["label"] or {}).get("vi") or v["key"]
+            print(f"  {'':<5} " + t(key, hex=v["hex"], raw=v["raw"], scale=v["scale"], name=name,
+                                     value=v["value"], unit=v["unit"], type=v["type"], order=v["byte_order"]))
+        print()
 
 
 def main(argv: list[str]) -> int:
@@ -118,7 +167,15 @@ def main(argv: list[str]) -> int:
     w.add_argument("--point")
     w.add_argument("--since", type=int)
     sub.add_parser("clear-writes", help="xóa nhật ký lệnh ghi")
+    fr = sub.add_parser("frames", help="xem khung tin Modbus thô (byte gửi và nhận)")
+    fr.add_argument("--device")
+    fr.add_argument("--function", type=int)
+    fr.add_argument("--errors", action="store_true", help="chỉ khung tin lỗi")
+    fr.add_argument("--limit", type=int, default=20)
+    sub.add_parser("clear-frames", help="xóa khung tin")
     sub.add_parser("reset", help="về giá trị khởi đầu và xóa nhật ký")
+    au = sub.add_parser("auto", help="xem / đặt chế độ tự thay đổi giá trị (giây, 0 = chỉ đặt bằng tay)")
+    au.add_argument("interval", nargs="?", type=int)
     args = ap.parse_args(argv)
     ctl = SimControl(args.url)
     try:
@@ -141,6 +198,16 @@ def main(argv: list[str]) -> int:
         elif args.cmd == "clear-writes":
             ctl.clear_writes()
             print("Đã xóa nhật ký lệnh ghi.")
+        elif args.cmd == "frames":
+            _print_frames(ctl.frames(args.device, args.function, args.errors, limit=args.limit))
+        elif args.cmd == "clear-frames":
+            ctl.clear_frames()
+            print("Đã xóa khung tin.")
+        elif args.cmd == "auto":
+            if args.interval is not None:
+                ctl.set_auto(args.interval)
+            n = ctl.auto()
+            print(f"Tự thay đổi giá trị: mỗi {n} giây" if n else "Tự thay đổi giá trị: tắt (chỉ đặt bằng tay)")
         elif args.cmd == "reset":
             ctl.reset()
             print("Đã đặt lại mọi giá trị và xóa nhật ký.")

@@ -199,6 +199,13 @@ def test_control_page(sim):
     assert code == 200 and "<title>Simulator</title>" in html
 
 
+def test_control_serves_shared_stylesheet(sim):
+    r = urllib.request.urlopen(sim.control_url + "/ui.css", timeout=3)
+    assert "text/css" in r.headers["Content-Type"] and ".workspace" in r.read().decode()
+    r = urllib.request.urlopen(sim.control_url + "/ui.js", timeout=3)
+    assert "javascript" in r.headers["Content-Type"] and "function renderSidebar" in r.read().decode()
+
+
 def test_control_serves_dictionary(sim):
     code, d = http(sim.control_url + "/i18n.json")
     assert code == 200 and set(d) == {"vi", "ja"} and d["ja"]["sim.bad_value"]

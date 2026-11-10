@@ -1,10 +1,20 @@
-"""COLLECTOR — đọc mọi điểm theo Point Map, giải mã, kiểm tra cảnh báo.
+"""COLLECTOR — đọc các điểm theo Point Map khi được yêu cầu, giải mã, kiểm tra cảnh báo.
 
-Chạy:  make collect                 (đọc liên tục, mở http://localhost:8080 để xem và ghi)
-       make once                    (đọc một lượt, in bảng rồi thoát)
+Chạy:  make collect                       (đọc khi bấm nút trên http://localhost:8080 — tiện kiểm thử)
+       make collect ARGS="--interval 2"   (tự đọc mỗi 2 giây, giống edge chạy thật)
+       make once                          (đọc một lượt, in bảng rồi thoát)
 
-Trang web (collector.html) lấy số liệu từ GET /api/points và ghi qua POST /api/write.
-Lệnh ghi từ web đi qua cùng rào chắn với edge/write-service/write.py.
+Mặc định KHÔNG tự đọc: mỗi lần bấm "Đọc" là đúng một lượt yêu cầu Modbus, nên khung tin và lệnh ghi bên
+simulator khớp với từng thao tác. Tự đọc bật/tắt được ngay trên trang (POST /api/auto).
+
+API cho trang web (collector.html):
+  GET  /api/points    số liệu lần đọc gần nhất, cảnh báo, mô tả điểm, lịch sử
+  POST /api/read      đọc ngay: {} = mọi điểm, {"device": "bess-01"}, {"point": "bess-01.muc_pin"}
+  POST /api/auto      {"interval": 0} tắt tự đọc, {"interval": 5} tự đọc mỗi 5 giây (1-3600)
+  POST /api/write     ghi qua cùng rào chắn với edge/write-service/write.py
+  POST /api/relinquish  BACnet: nhả lệnh {"point": "crah-01.diem_dat_nhiet"} ở priority của điểm
+  GET  /api/frames    khung tin collector gửi đi và nhận về; lọc ?device=&function=&errors=1&since=&limit=
+  DELETE /api/frames  xóa khung tin
 
 Mỗi địa chỉ host:port một kết nối; thiết bị sau cùng gateway dùng chung. Một địa chỉ không kết nối
 được thì chỉ các thiết bị ở địa chỉ đó báo lỗi, và lượt đó không thử lại nó cho từng điểm.
@@ -14,28 +24,42 @@ import argparse, json, logging, threading, time, warnings
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
+from audit import DEFAULT_PATH as AUDIT_PATH, AuditLog
+from frames import FrameLog
 from i18n import SCRIPT, ApiError, Translatable, by_language, t
 from modbus_io import Connections, address
-from point_map import DEFAULT_PATH, load_or_exit
+from point_map import DEFAULT_PATH, device_meta, load_or_exit, point_ref
 
 warnings.filterwarnings("ignore")
 logging.getLogger("pymodbus").setLevel(logging.CRITICAL)
 LATEST, ALERTS, HISTORY = {}, {}, {}           # HISTORY: các giá trị gần nhất của mỗi điểm, để vẽ xu hướng
-STATUS = {"round": 0, "at": None}
+# round/at: lượt đọc gần nhất; read/ok_count/ms: kết quả lượt đó; auto: chu kỳ tự đọc (0 = chỉ đọc khi bấm)
+STATUS = {"round": 0, "at": None, "read": 0, "ok_count": 0, "ms": None, "auto": 0}
 CLIENT_LOCK = threading.Lock()                 # kết nối pymodbus không an toàn đa luồng: lượt đọc và lệnh ghi từ web
 DATA_LOCK = threading.Lock()                   # trang web đọc số liệu trong lúc vòng đọc đang cập nhật
 PAGE = Path(__file__).with_name("collector.html")
+WEB = Path(__file__).resolve().parents[1] / "web"     # giao diện dùng chung với trang simulator: ui.css, ui.js
+AUTO_MAX = 3600
 
 
-def poll_once(conns, cfg):
+def poll_once(conns, cfg, device: str | None = None, point: str | None = None) -> dict:
+    """Đọc mọi điểm, hoặc chỉ một thiết bị / một điểm. Trả về {read, ok_count, ms}."""
     rows, down = {}, set()                         # down: địa chỉ không kết nối được trong lượt này
+    t0 = time.perf_counter()
     with CLIENT_LOCK:
         for d in cfg["devices"]:
+            if device is not None and d["name"] != device:
+                continue
+            targets = [p for p in d["points"] if point is None or f"{d['name']}.{p['name']}" == point]
+            if not targets:
+                continue
             ep = address(d)
-            if ep not in down and not conns.client(d).connected:
+            if ep not in down and not conns.reachable(d):
                 down.add(ep)
-            for p in d["points"]:
+            if ep in down:
+                conns.unreachable(d)                   # một mục khung tin cho thiết bị, không lặp theo điểm
+            for p in targets:
                 key = f"{d['name']}.{p['name']}"
                 row = {"unit": p.get("unit", ""), "at": time.strftime("%H:%M:%S")}
                 if ep in down:
@@ -49,12 +73,15 @@ def poll_once(conns, cfg):
                         row.update(value=None, ok=False,
                                    **_error_row("read.failed", detail=str(e) or type(e).__name__))
                 rows[key] = row
+    result = {"read": len(rows), "ok_count": sum(r["ok"] for r in rows.values()),
+              "ms": round((time.perf_counter() - t0) * 1000, 1)}
     with DATA_LOCK:
         LATEST.update(rows)
         for k, r in rows.items():
             HISTORY.setdefault(k, deque(maxlen=60)).append(r["value"])
-        STATUS.update(round=STATUS["round"] + 1, at=time.strftime("%H:%M:%S"))
+        STATUS.update(round=STATUS["round"] + 1, at=time.strftime("%H:%M:%S"), **result)
         check_alerts(cfg)
+    return result
 
 
 def _error_row(code: str, **params) -> dict:
@@ -81,12 +108,14 @@ def print_table():
 
 def snapshot(cfg):
     """Mọi thứ trang web cần trong một lần gọi. Gọi khi đang giữ DATA_LOCK."""
-    devices = [{"name": d["name"], "label": d["label"], "device_id": d["device_id"], "byte_order": d["byte_order"],
+    devices = [{"name": d["name"], "label": d["label"], "device_id": d.get("device_id"),
+                "byte_order": d.get("byte_order"), "protocol": d.get("protocol", "modbus"), "meta": device_meta(d),
                 "endpoint": address(d), "site_endpoint": d.get("site_address", address(d)),
                 "points": [{"key": f"{d['name']}.{p['name']}", "name": p["name"], "label": p["label"],
-                            "unit": p.get("unit", ""),
-                            "table": p["table"], "address": p["address"], "type": p["type"],
-                            "writable": bool(p.get("writable")), "allowed": p.get("allowed")}
+                            "unit": p.get("unit", ""), "ref": point_ref(d, p),
+                            "table": p.get("table"), "address": p.get("address"), "type": p.get("type"),
+                            "writable": bool(p.get("writable")), "allowed": p.get("allowed"),
+                            "priority": p.get("priority")}
                            for p in d["points"]]}
                for d in cfg["devices"]]
     return {"site": cfg.get("site"), "env": cfg.get("env"),
@@ -98,8 +127,20 @@ def snapshot(cfg):
             "status": STATUS}
 
 
+def auto_loop(conns, cfg):
+    """Tự đọc theo STATUS["auto"] giây; 0 = nằm chờ. Chạy nền suốt đời tiến trình."""
+    last = 0.0
+    while True:
+        interval = STATUS["auto"]
+        if interval and time.monotonic() - last >= interval:
+            last = time.monotonic()
+            r = poll_once(conns, cfg)
+            print(f"Lượt {STATUS['round']} (tự đọc): {r['ok_count']}/{r['read']} điểm đọc được, {r['ms']} ms")
+        time.sleep(0.1)
+
+
 class Web(BaseHTTPRequestHandler):
-    cfg = conns = None                             # gán trong serve()
+    cfg = conns = frames = audit = None            # gán trong serve()
 
     def log_message(self, *a):
         pass
@@ -114,49 +155,137 @@ class Web(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def body(self):
+        """JSON gửi lên; rỗng thì {}. Sai dạng -> ValueError."""
+        raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        data = json.loads(raw) if raw.strip() else {}
+        if not isinstance(data, dict):
+            raise ValueError
+        return data
+
     def do_GET(self):
         path = urlparse(self.path).path           # bỏ phần ?lang=... của trang web
         if path == "/api/points":
             with DATA_LOCK:
                 body = json.dumps(snapshot(self.cfg), ensure_ascii=False).encode()
             self.reply(200, body)
+        elif path == "/api/frames":
+            return self.get_frames()
         elif path in ("/", "/index.html"):
             self.reply(200, PAGE.read_bytes(), "text/html; charset=utf-8")
         elif path == "/i18n.json":
             self.reply(200, by_language())
+        elif path == "/ui.css":
+            self.reply(200, (WEB / "ui.css").read_bytes(), "text/css; charset=utf-8")
+        elif path in ("/ui.js", "/frames.js"):
+            self.reply(200, (WEB / path[1:]).read_bytes(), "text/javascript; charset=utf-8")
         elif path == "/i18n.js":
             self.reply(200, SCRIPT.read_bytes(), "text/javascript; charset=utf-8")
         else:
             self.reply(404, {"ok": False, **ApiError("api.not_found").as_json()})
 
-    def do_POST(self):
-        if urlparse(self.path).path != "/api/write":
-            return self.reply(404, {"ok": False, **ApiError("api.not_found").as_json()})
-        from write import WriteBlocked, write_guarded     # nhập muộn: write.py cũng nhập collector
+    def get_frames(self):
+        q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
         try:
-            req = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)))
-            key, value = str(req["point"]), float(req["value"])
+            since = int(q["since"]) if "since" in q else None
+            limit = int(q["limit"]) if "limit" in q else None
+            function = int(q["function"]) if "function" in q else None
+        except ValueError:
+            return self.reply(400, {"ok": False, **ApiError("api.bad_frames_query").as_json()})
+        self.reply(200, {"frames": self.frames.query(since, limit, q.get("device"), function,
+                                                     q.get("errors") in ("1", "true"))})
+
+    def do_DELETE(self):
+        if urlparse(self.path).path != "/api/frames":
+            return self.reply(404, {"ok": False, **ApiError("api.not_found").as_json()})
+        self.frames.clear()
+        self.reply(200, {"ok": True})
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+        if path == "/api/read":
+            return self.read()
+        if path == "/api/auto":
+            return self.auto()
+        if path == "/api/write":
+            return self.write()
+        if path == "/api/relinquish":
+            return self.write(relinquish=True)
+        self.reply(404, {"ok": False, **ApiError("api.not_found").as_json()})
+
+    def read(self):
+        try:
+            req = self.body()
+        except ValueError:
+            return self.reply(400, {"ok": False, **ApiError("api.bad_read_request").as_json()})
+        device, point = req.get("device"), req.get("point")
+        names = {d["name"] for d in self.cfg["devices"]}
+        keys = {f"{d['name']}.{p['name']}" for d in self.cfg["devices"] for p in d["points"]}
+        target = point if point is not None else device
+        if (point is not None and point not in keys) or (device is not None and device not in names):
+            return self.reply(404, {"ok": False, **ApiError("api.unknown_target", target=target).as_json()})
+        result = poll_once(self.conns, self.cfg, device, point)
+        print(f"Lượt {STATUS['round']} ({target or 'tất cả'}): {result['ok_count']}/{result['read']} điểm, "
+              f"{result['ms']} ms")
+        with DATA_LOCK:
+            snap = json.loads(json.dumps(snapshot(self.cfg), ensure_ascii=False))
+        self.reply(200, {"ok": True, **result, "snapshot": snap})
+
+    def auto(self):
+        try:
+            interval = self.body().get("interval")
+            ok = isinstance(interval, int) and not isinstance(interval, bool) and (
+                interval == 0 or 1 <= interval <= AUTO_MAX)
+        except ValueError:
+            ok = False
+        if not ok:
+            return self.reply(400, {"ok": False, **ApiError("api.bad_auto", max=AUTO_MAX).as_json()})
+        STATUS["auto"] = interval
+        print(f"  ~~ Tự đọc: {'tắt' if not interval else f'mỗi {interval} giây'}")
+        self.reply(200, {"ok": True, "auto": interval})
+
+    def write(self, relinquish=False):
+        from write import WriteBlocked, find, relinquish_guarded, write_guarded   # nhập muộn: write.py cũng nhập collector
+        try:
+            req = self.body()
+            key = str(req["point"])
+            value = None if relinquish else float(req["value"])
         except (ValueError, KeyError, TypeError):
             return self.reply(400, {"ok": False, **ApiError("api.bad_write_request").as_json()})
+        actor = f"web:{self.client_address[0]}"
         try:
             with CLIENT_LOCK:
-                before, after = write_guarded(self.cfg, self.conns, key, value)
+                if relinquish:
+                    before, after = None, relinquish_guarded(self.cfg, self.conns, key, self.audit, actor)
+                else:
+                    before, after = write_guarded(self.cfg, self.conns, key, value, self.audit, actor)
         except WriteBlocked as e:
             print(f"  xx Rào chắn từ chối lệnh ghi từ web: {key} = {value} ({e})")
             return self.reply(403, {"ok": False, "blocked": True, **e.as_json()})
         except Translatable as e:                  # thiết bị từ chối, đọc lại không khớp, mã lỗi Modbus
             return self.reply(502, {"ok": False, **e.as_json()})
         except Exception as e:                     # mất kết nối, timeout
+            self.conns.no_response(find(self.cfg, key)[0])
             return self.reply(502, {"ok": False, **_error_row("read.failed", detail=str(e) or type(e).__name__)})
+        if relinquish:
+            priority = find(self.cfg, key)[1]["priority"]
+            print(f"  >> Nhả lệnh từ web: {key} (ưu tiên {priority}) -> {after}")
+            return self.reply(200, {"ok": True, "point": key, "after": after, "priority": priority})
         print(f"  >> Ghi từ web: {key}: {before} -> {after} (đã đọc lại xác nhận)")
         self.reply(200, {"ok": True, "point": key, "before": before, "after": after})
 
 
-def serve(cfg, conns, host="127.0.0.1", port=8080):
-    """Chạy web ở luồng nền. port=0 để hệ điều hành tự chọn cổng (dùng cho kiểm thử)."""
-    Web.cfg, Web.conns = cfg, conns
+def serve(cfg, conns, host="127.0.0.1", port=8080, frames=500, audit=None):
+    """Chạy web và luồng tự đọc (nằm chờ khi STATUS["auto"] = 0). port=0 để hệ điều hành chọn cổng.
+
+    frames: số cặp khung tin gần nhất collector giữ lại để xem byte gửi và nhận.
+    """
+    log = FrameLog({(address(d), d.get("device_id")): d for d in cfg["devices"]}, frames)
+    conns.trace(log)
+    Web.cfg, Web.conns, Web.frames, Web.audit = cfg, conns, log, audit
     srv = ThreadingHTTPServer((host, port), Web)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
+    threading.Thread(target=auto_loop, args=(conns, cfg), daemon=True).start()
     return srv
 
 
@@ -165,24 +294,28 @@ if __name__ == "__main__":
     ap.add_argument("--config", default=DEFAULT_PATH)
     ap.add_argument("--env", default="lab", help="lab = simulator (mặc định); site = thiết bị thật")
     ap.add_argument("--once", action="store_true")
-    ap.add_argument("--interval", type=float, default=2.0)
+    ap.add_argument("--interval", type=int, default=0,
+                    help="tự đọc mỗi N giây (1-3600); mặc định 0 = chỉ đọc khi bấm nút trên trang")
     ap.add_argument("--web-host", default="127.0.0.1", help="0.0.0.0 để mở từ ngoài máy ảo")
     ap.add_argument("--web-port", type=int, default=8080)
+    ap.add_argument("--frames", type=int, default=500, help="số cặp khung tin gần nhất giữ lại để xem")
+    ap.add_argument("--audit", default=AUDIT_PATH, help=f"nhật ký kiểm toán lệnh ghi (mặc định {AUDIT_PATH})")
     args = ap.parse_args()
+    if not 0 <= args.interval <= AUTO_MAX:
+        ap.error(f"--interval phải từ 0 đến {AUTO_MAX}")
     cfg = load_or_exit(args.config, args.env)
     c = Connections()
     if args.once:
         poll_once(c, cfg)
         print_table()
         raise SystemExit
-    serve(cfg, c, args.web_host, args.web_port)
-    print(f"Collector site {cfg.get('site', '?')}, môi trường {args.env}. "
+    STATUS["auto"] = args.interval
+    serve(cfg, c, args.web_host, args.web_port, args.frames, AuditLog(args.audit))
+    mode = f"tự đọc mỗi {args.interval} giây" if args.interval else "đọc khi bấm nút trên trang"
+    print(f"Collector site {cfg.get('site', '?')}, môi trường {args.env}, {mode}. "
           f"Xem tại http://{args.web_host}:{args.web_port}  (Ctrl+C để dừng)")
     try:
         while True:
-            poll_once(c, cfg)
-            ok = sum(r["ok"] for r in LATEST.values())
-            print(f"Lượt {STATUS['round']}: {ok}/{len(LATEST)} điểm đọc được")
-            time.sleep(args.interval)
+            time.sleep(3600)
     except KeyboardInterrupt:
         print("\nĐã dừng collector.")

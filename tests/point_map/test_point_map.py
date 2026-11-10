@@ -253,15 +253,20 @@ def test_default_environment_is_lab():
     assert GOOD["env"] == "lab" and read(PATH)["env"] == "lab"
 
 
-def write_site(tmp_path, cfg, addresses):
+# Ánh xạ thật của môi trường lab: thêm thiết bị vào Point Map không làm vỡ các bài dưới đây.
+_LAB_ENV = yaml.safe_load(open("edge/point-map/environments/lab.yml", encoding="utf-8"))
+LAB_SERIAL = dict(_LAB_ENV["serial"])
+
+
+def write_site(tmp_path, cfg, addresses, serial=LAB_SERIAL):
     (tmp_path / "devices.yml").write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
     (tmp_path / "environments").mkdir()
     (tmp_path / "environments" / "lab.yml").write_text(
-        yaml.safe_dump({"addresses": addresses}), encoding="utf-8")
+        yaml.safe_dump({"addresses": addresses, "serial": serial}), encoding="utf-8")
     return str(tmp_path / "devices.yml")
 
 
-LAB = {"10.20.0.21:502": "127.0.1.21:5020", "10.20.0.30:502": "127.0.1.30:5020"}
+LAB = dict(_LAB_ENV["addresses"])
 
 
 def env_errors(tmp_path, addresses):
@@ -271,7 +276,7 @@ def env_errors(tmp_path, addresses):
 
 
 def test_environment_missing_an_address(tmp_path):
-    (e,) = env_errors(tmp_path, {"10.20.0.21:502": "127.0.1.21:5020"})
+    (e,) = env_errors(tmp_path, {k: v for k, v in LAB.items() if k != "10.20.0.30:502"})
     assert "10.20.0.30:502" in e and "bess-01" in e
 
 
@@ -281,13 +286,20 @@ def test_environment_with_unused_address(tmp_path):
 
 
 def test_environment_maps_two_addresses_to_one(tmp_path):
-    (e,) = env_errors(tmp_path, {"10.20.0.21:502": "127.0.1.21:5020", "10.20.0.30:502": "127.0.1.21:5020"})
+    (e,) = env_errors(tmp_path, {**LAB, "10.20.0.30:502": "127.0.1.21:5020"})
     assert "127.0.1.21:5020" in e
 
 
 def test_environment_bad_address_format(tmp_path):
     (e,) = env_errors(tmp_path, {**LAB, "10.20.0.30:502": "127.0.1.30"})
     assert "127.0.1.30" in e
+
+
+def test_environment_missing_a_serial_port(tmp_path):
+    with pytest.raises(PointMapError) as e:
+        read(write_site(tmp_path, SITE, LAB, serial={}))
+    (err,) = e.value.errors
+    assert "/dev/ttyUSB0" in err and "dong-ho-rs485-03" in err
 
 
 def test_missing_environment_file(tmp_path):
@@ -304,7 +316,8 @@ def test_missing_environment_file(tmp_path):
 def test_startup_rejects_invalid_point_map(tmp_path, script, extra):
     cfg = broken(SITE)
     device(cfg, "bess-01")["byte_order"] = "ABDC"
-    bad = write_site(tmp_path, cfg, {"10.20.0.21:502": "127.0.1.21:5031", "10.20.0.30:502": "127.0.1.30:5031"})
+    ports = {k: v.rsplit(":", 1)[0] + ":5031" for k, v in LAB.items()}      # không đụng simulator đang chạy
+    bad = write_site(tmp_path, cfg, ports, serial={k: str(tmp_path / "tty") for k in LAB_SERIAL})
     env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
     r = subprocess.run([sys.executable, script, "--config", bad, *extra],
                        capture_output=True, text=True, timeout=10, env=env)

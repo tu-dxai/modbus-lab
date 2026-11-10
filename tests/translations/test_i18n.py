@@ -9,11 +9,13 @@ import pytest
 from i18n import LANGS, Translatable, catalog, t
 
 ROOT = Path(__file__).resolve().parents[2]
-PAGES = [ROOT / "tools/dashboard/collector.html", ROOT / "tools/simulator/control.html"]
+PAGES = [ROOT / "tools/dashboard/collector.html", ROOT / "tools/simulator/control.html",
+         ROOT / "tools/web/ui.js", ROOT / "tools/web/frames.js"]
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
 # Mã lỗi trong code Python: lớp lỗi dịch được, gọi với chuỗi mã làm đối số đầu tiên.
 PY_CODE = re.compile(r"\b(?:WriteBlocked|WriteFailed|ReadError|BadValue|UnknownPoint|ApiError)\(\s*\"([a-z0-9_.]+)\"")
-JS_KEY = re.compile(r"""data-i18n(?:-title|-placeholder)?="([a-z0-9_.]+)"|\bt\(\s*'([a-z0-9_.]+)'""")
+JS_KEY = re.compile(r"""data-i18n(?:-title|-placeholder)?="([a-z0-9_.]+)"|\bt\(\s*'([a-z0-9_.]+)'"""
+                    r"""|iconButton\(\s*'\w+',\s*'([a-z0-9_.]+)'""")
 
 
 def test_every_key_has_both_languages():
@@ -45,7 +47,7 @@ def test_translatable_error_carries_code_and_vietnamese_text():
 
 @pytest.mark.parametrize("page", PAGES, ids=lambda p: p.name)
 def test_page_keys_exist(page):
-    keys = {a or b for a, b in JS_KEY.findall(page.read_text(encoding="utf-8"))}
+    keys = {next(k for k in m if k) for m in JS_KEY.findall(page.read_text(encoding="utf-8"))}
     assert keys, f"{page.name} chưa dùng từ điển"
     assert sorted(keys - catalog().keys()) == []
 

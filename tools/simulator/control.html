@@ -5,108 +5,75 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Simulator</title>
 <link rel="icon" href="data:,">
+<link rel="stylesheet" href="/ui.css">
 <style>
-  :root {
-    --bg: #f6f7f9; --card: #fff; --text: #1c2129; --muted: #6b7280; --line: #e5e7eb;
-    --ok: #15803d; --ok-bg: #dcfce7; --err: #b91c1c; --err-bg: #fee2e2;
-    --accent: #2563eb; --accent-bg: #dbeafe; --flash: #fef9c3;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0f1218; --card: #181c24; --text: #e5e7eb; --muted: #9ca3af; --line: #2a303b;
-      --ok: #4ade80; --ok-bg: #14321f; --err: #f87171; --err-bg: #3b1515;
-      --accent: #60a5fa; --accent-bg: #172554; --flash: #3a3410;
-    }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
-               "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif; }
-  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 40px; }
-  header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 6px; }
-  header.top h1 { font-size: 20px; margin: 0; margin-right: auto; }
-  .lead { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
-  .pill { padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
-  .pill.ok { color: var(--ok); background: var(--ok-bg); }
-  .pill.err { color: var(--err); background: var(--err-bg); }
-  .layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-  .card + .card { margin-top: 16px; }
-  .card > header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-  .card h2 { font-size: 16px; margin: 0; }
-  .muted { color: var(--muted); font-size: 13px; }
-  .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
-  .row:last-child { border-bottom: 0; }
-  .row.flash { animation: flash 1.2s ease-out; }
-  @keyframes flash { from { background: var(--flash); } to { background: transparent; } }
-  .name { font-weight: 600; }
-  .meta { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
-  .tag { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 6px; color: var(--accent); background: var(--accent-bg); margin-left: 6px; vertical-align: 1px; }
-  .set { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
-  .now { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 18px; min-width: 90px; text-align: right; }
-  .unit { color: var(--muted); font-size: 13px; min-width: 24px; }
-  input[type=number] { width: 100px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
-  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px; padding: 5px 12px; cursor: pointer; }
-  button:hover { border-color: var(--accent); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .err-msg { grid-column: 1 / -1; color: var(--err); font-size: 13px; }
-  .err-msg:empty { display: none; }
-  .log { max-height: 75vh; overflow-y: auto; }
-  .w { padding: 10px 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
-  .w:last-child { border-bottom: 0; }
-  .w .head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
-  .w .seq { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; }
-  .w .st { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
-  .w .st.ok { color: var(--ok); background: var(--ok-bg); }
-  .w .st.err { color: var(--err); background: var(--err-bg); }
-  .w .pts { margin-top: 2px; font-variant-numeric: tabular-nums; }
-  .w .raw { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
-  .empty { padding: 20px 16px; color: var(--muted); }
-  .actions { display: flex; gap: 8px; margin-left: auto; }
-  .langs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .langs button { border: 0; border-radius: 0; padding: 5px 10px; font-size: 13px; }
-  .langs button + button { border-left: 1px solid var(--line); }
-  .langs button.on { background: var(--accent); color: #fff; }
-  .card > header .meta { flex-basis: 100%; }
+  .reg { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
+  .lim { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  td.value-col { width: 1%; white-space: nowrap; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
+<div class="app">
+  <header class="topbar">
+    <button id="side-toggle" class="icon-btn" data-icon="sidebar" data-i18n-title="ui.toggle_side"></button>
     <h1 data-i18n="simui.title">Simulator</h1>
+    <span class="spacer"></span>
     <span id="conn" class="pill ok" data-i18n="simui.connecting"></span>
-    <div class="actions">
-      <div class="langs"><button data-lang="vi">Tiếng Việt</button><button data-lang="ja">日本語</button></div>
-      <button id="reset" data-i18n="simui.reset" data-i18n-title="simui.reset_hint"></button>
-    </div>
+    <div class="seg langs"><button data-lang="vi">Tiếng Việt</button><button data-lang="ja">日本語</button></div>
+    <button id="reset" class="btn" data-icon="reset" data-i18n-title="simui.reset_hint"><span data-i18n="simui.reset"></span></button>
+    <button id="help-open" class="icon-btn" data-icon="help" data-i18n-title="ui.help"></button>
   </header>
-  <p class="lead" data-i18n="simui.lead"></p>
-  <div class="layout">
-    <main id="devices"></main>
-    <section class="card">
-      <header><h2 data-i18n="simui.log_title"></h2><span id="count" class="muted"></span>
-        <div class="actions"><button id="clear" data-i18n="simui.clear"></button></div></header>
-      <div id="log" class="log"></div>
+  <div class="workspace">
+    <aside class="side card">
+      <div class="search"><input id="q" class="field" type="search" autocomplete="off" data-i18n-placeholder="ui.search"></div>
+      <div id="devlist" class="list"></div>
+    </aside>
+    <section id="content" class="content">
+      <!-- đặt giá trị cho thiết bị giả; lệnh client gửi tới xem ở khung tin trang collector (hoặc make writes) -->
+      <div class="panel card" style="flex: 1">
+        <div class="panel-head">
+          <h2 id="title"></h2><span id="sub" class="sub"></span>
+          <div class="tools">
+            <span class="small muted hide-sm" data-i18n="simui.set_hint"></span>
+            <label class="chk small" data-i18n-title="simui.auto_hint"><span data-i18n="simui.auto"></span>
+              <select id="auto" class="field"></select></label>
+          </div>
+        </div>
+        <div class="scroll">
+          <table class="grid">
+            <thead><tr>
+              <th data-i18n="ui.col_point"></th>
+              <th class="hide-sm" data-i18n="ui.col_register"></th>
+              <th class="hide-sm" data-i18n="ui.col_limits"></th>
+              <th class="r" data-i18n="ui.col_value"></th>
+            </tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
   </div>
 </div>
 
-<script src="/i18n.js"></script>
-<script>
-const $ = (s) => document.querySelector(s);
-const rows = {};                         // điểm -> phần tử cần cập nhật
-const labels = {};                       // điểm -> nhãn song ngữ, để hiện trong nhật ký lệnh ghi
-const deviceLabels = {};                 // thiết bị -> nhãn song ngữ
-let built = '';
-let lastPoints = null, lastWrites = null, connState = ['ok', 'simui.connecting'];
+<div id="help" class="drawer-wrap" hidden>
+  <aside class="drawer" role="dialog" aria-modal="true">
+    <div class="drawer-head"><h2></h2><button class="icon-btn" data-icon="x" data-i18n-title="ui.close"></button></div>
+    <div class="drawer-body"></div>
+  </aside>
+</div>
 
-function el(tag, cls, text) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
+<script src="/i18n.js"></script>
+<script src="/ui.js"></script>
+<script>
+let points = null, auto = 0, connState = ['ok', 'simui.connecting'];
+const AUTO_CHOICES = [0, 5, 10, 30];
+let selected = selectedDevice();
+let built = '', lastValues = {};
+const rows = {};                         // điểm -> phần tử cần cập nhật
+const labels = {};                       // điểm -> nhãn song ngữ
+const devices = new Map();               // thiết bị -> { name, label, device_id, byte_order, endpoint, site_endpoint, points }
+
+const fmt = (v) => v === null || v === undefined ? '?' : fmtNum(v, 3);
 
 async function api(method, path, body) {
   const res = await fetch(path, { method, cache: 'no-store',
@@ -116,147 +83,178 @@ async function api(method, path, body) {
   return j;
 }
 
-function limits(p) {
-  if (p.allowed) return t('simui.allowed', { values: p.allowed });
-  if ('min' in p) return t('simui.range', { min: p.min, max: p.max });
-  return '';
-}
-
 function pointName(key) {
   return tr(labels[key]) || key.split('.').slice(1).join('.');
 }
 
-function build(points) {
-  const main = $('#devices');
-  main.replaceChildren();
-  const byDevice = {};
-  for (const [key, p] of Object.entries(points)) (byDevice[p.device] ||= []).push([key, p]);
-  for (const [dev, list] of Object.entries(byDevice)) {
-    const first = list[0][1];
-    deviceLabels[dev] = first.device_label;
-    const card = el('section', 'card');
-    const h = el('header');
-    const site = first.site_endpoint !== first.endpoint ? t('simui.site_suffix', { site: first.site_endpoint }) : '';
-    h.append(el('h2', '', tr(first.device_label) || dev),
-             el('div', 'meta', `${dev} · ` + t('common.device_meta',
-               { endpoint: first.endpoint, site, id: first.device_id, order: first.byte_order })));
-    card.append(h);
-    for (const [key, p] of list) {
-      labels[key] = p.label;
-      const row = el('div', 'row');
-      const info = el('div');
-      const name = el('div', 'name', tr(p.label));
-      if (p.writable) name.append(el('span', 'tag', t('simui.writable')));
-      const lim = limits(p);
-      const code = key.split('.').slice(1).join('.');
-      info.append(name, el('div', 'meta', `${code} · ${p.table} ${p.address} · ${p.type}${lim ? ' · ' + lim : ''}`));
-      const set = el('div', 'set');
-      const now = el('span', 'now', '—');
-      const unit = el('span', 'unit', p.unit);
-      const inp = el('input');
-      inp.type = 'number'; inp.step = 'any'; inp.placeholder = t('simui.new_value');
-      const btn = el('button', 'primary', t('simui.set'));
-      const msg = el('div', 'err-msg');
-      const go = () => setValue(key, inp, msg);
-      btn.onclick = go;
-      inp.onkeydown = (e) => { if (e.key === 'Enter') go(); };
-      set.append(now, unit, inp, btn);
-      row.append(info, set, msg);
-      rows[key] = { row, now };
-      card.append(row);
-    }
-    main.append(card);
+function deviceName(name) {
+  const d = devices.get(name);
+  return d ? tr(d.label) || name : name;
+}
+
+function siteSuffix(d) {
+  return d.site_endpoint !== d.endpoint ? t('simui.site_suffix', { site: d.site_endpoint }) : '';
+}
+
+// ---------- thiết bị và điểm đo ----------
+function indexDevices(pts) {
+  devices.clear();
+  for (const [key, p] of Object.entries(pts)) {
+    labels[key] = p.label;
+    if (!devices.has(p.device)) devices.set(p.device, { name: p.device, label: p.device_label, device_id: p.device_id,
+      byte_order: p.byte_order, protocol: p.protocol, meta: p.device_meta,
+      endpoint: p.endpoint, site_endpoint: p.site_endpoint, points: [] });
+    devices.get(p.device).points.push([key, p]);
   }
 }
 
-const fmt = (v) => v === null || v === undefined ? '?' : Number(v).toLocaleString(locale(), { maximumFractionDigits: 3 });
-
-async function setValue(key, inp, msg) {
-  if (inp.value === '') return;
-  msg.textContent = '';
-  try {
-    await api('POST', '/api/state', { [key]: Number(inp.value) });
-    inp.value = '';
-    refresh();
-  } catch (e) { msg.textContent = e.message; }
+function limitText(p) {
+  if (p.allowed) return t('simui.allowed', { values: p.allowed });
+  if ('min' in p) return t('simui.range', { min: p.min, max: p.max });
+  return t('simui.new_value');
 }
 
-let lastValues = {};
-function update(points) {
+function pointRow(key, p) {
+  const row = el('tr');
+  const name = el('td', 'label-cell');
+  const main = el('div', 'main', tr(p.label));
+  if (p.writable) main.append(' ', el('span', 'badge', t('simui.writable')));
+  name.append(main, el('div', 'code', key.split('.').slice(1).join('.')));
+  const reg = el('td', 'hide-sm reg');
+  reg.append(pointRef(p, p.protocol));
+  const lim = el('td', 'hide-sm lim', p.allowed || 'min' in p ? limitText(p) : '');
+  const value = el('td', 'r value-col');
+  const cell = el('span', 'val-cell');
+  const num = el('span', 'value', '—');
+  const edit = iconButton('pencil', 'ui.edit', 'edit');     // ✎ mở ô nhập ngay tại chỗ; Enter đặt, Esc hủy
+  edit.onclick = () => openEditor(value, {
+    value: points[key].value, hint: limitText(p), unit: p.unit,
+    onSave: v => api('POST', '/api/state', { [key]: v }).then(refresh),
+  });
+  cell.append(num, edit);
+  value.append(cell);
+  row.append(name, reg, lim, value);
+  rows[key] = { tr: row, num, unit: p.unit };
+  return row;
+}
+
+function build() {
+  for (const k in rows) delete rows[k];
+  const body = $('#rows');
+  body.replaceChildren();
+  const q = $('#q').value.trim();
+  const list = [...devices.values()].filter(d => selected === ALL ? deviceMatches(d, q) : d.name === selected);
+  if (selected === ALL) {
+    $('#title').textContent = t('ui.all_devices');
+    $('#sub').textContent = t('ui.n_points', { n: list.reduce((n, d) => n + d.points.length, 0) });
+    for (const d of list) {
+      const head = el('tr', 'devrow'), td = el('td', '', tr(d.label) || d.name);
+      td.colSpan = 4;
+      td.append(el('span', 'meta', `${d.name} · ${d.endpoint}${siteSuffix(d)} · ${deviceShort(d.meta)}`));
+      head.append(td);
+      body.append(head, ...d.points.map(([k, p]) => pointRow(k, p)));
+    }
+  } else if (list.length) {
+    const d = list[0];
+    $('#title').textContent = tr(d.label) || d.name;
+    $('#sub').textContent = `${d.name} · ` + deviceMetaText(d, d.meta, siteSuffix(d));
+    body.append(...d.points.map(([k, p]) => pointRow(k, p)));
+  }
+  if (!body.children.length) {
+    const row = el('tr', 'empty-row'), td = el('td', '', t('ui.no_match'));
+    td.colSpan = 4; row.append(td); body.append(row);
+  }
+}
+
+function sidebar() {
+  renderSidebar($('#devlist'), [...devices.values()], {
+    selected, query: $('#q').value.trim(),
+    allMeta: t('ui.n_points', { n: Object.keys(points || {}).length }),
+    itemMeta: d => deviceShort(d.meta),
+    onSelect: name => { selected = name; selectDevice(name); renderPoints(); },
+  });
+}
+
+function updateValues() {
   for (const [key, p] of Object.entries(points)) {
     const r = rows[key];
     if (!r) continue;
-    r.now.textContent = fmt(p.value);
+    r.num.replaceChildren(document.createTextNode(fmt(p.value)), el('span', 'unit', r.unit));
     if (key in lastValues && lastValues[key] !== p.value) {
-      r.row.classList.remove('flash'); void r.row.offsetWidth; r.row.classList.add('flash');
+      r.tr.classList.remove('flash'); void r.tr.offsetWidth; r.tr.classList.add('flash');
     }
   }
   lastValues = Object.fromEntries(Object.entries(points).map(([k, p]) => [k, p.value]));
 }
 
-function renderLog(writes) {
-  $('#count').textContent = writes.length ? t('simui.log_count', { n: writes.length }) : '';
-  const log = $('#log');
-  if (!writes.length) { log.replaceChildren(el('div', 'empty', t('simui.empty'))); return; }
-  log.replaceChildren(...writes.slice().reverse().map(w => {
-    const box = el('div', 'w');
-    const head = el('div', 'head');
-    head.append(el('span', 'seq', `#${w.seq} · ${w.at.slice(11)}`),
-                el('span', 'st ' + (w.accepted ? 'ok' : 'err'),
-                   w.accepted ? t('simui.accepted') : t('simui.rejected', { code: w.exception })),
-                el('span', '', w.device ? (tr(deviceLabels[w.device]) || w.device)
-                                        : t('simui.unknown_device', { id: w.device_id })),
-                el('span', 'seq', t('simui.target', { endpoint: w.site_endpoint })));
-    const pts = el('div', 'pts', w.points.length
-      ? w.points.map(p => w.accepted
-          ? `${pointName(p.key)}: ${fmt(p.before)} → ${fmt(p.value)}`
-          : t('simui.attempt', { name: pointName(p.key), value: fmt(p.value), before: fmt(p.before) })).join(' · ')
-      : t('simui.no_point'));
-    const raw = el('div', 'raw', t('simui.raw',
-      { fc: String(w.function).padStart(2, '0'), address: w.address, registers: w.registers }));
-    box.append(head, pts, raw);
-    return box;
-  }));
+function renderPoints() {
+  if (!points) return;
+  if (selected !== ALL && !devices.has(selected)) selected = ALL;
+  const shape = JSON.stringify([I18N.lang, selected, $('#q').value, Object.keys(points)]);
+  if (shape !== built) { build(); built = shape; sidebar(); }
+  updateValues();
 }
 
+// ---------- vòng cập nhật: hiện giá trị thiết bị đang báo (đổi khi đặt tay, tự thay đổi, hoặc client ghi) ----------
 function setConn(kind, key) {
   connState = [kind, key];
   $('#conn').className = 'pill ' + kind;
   $('#conn').textContent = t(key);
 }
 
-let lastLog = '';
-function render(force) {
-  if (!lastPoints) return;
-  const shape = JSON.stringify([I18N.lang, Object.keys(lastPoints)]);
-  if (shape !== built) { build(lastPoints); built = shape; }
-  update(lastPoints);
-  const sig = JSON.stringify([I18N.lang, lastWrites.map(w => w.seq)]);
-  if (force || sig !== lastLog) { renderLog(lastWrites); lastLog = sig; }
-}
-
 async function refresh() {
   try {
-    const [{ points }, { writes }] = await Promise.all([api('GET', '/api/state'), api('GET', '/api/writes')]);
-    lastPoints = points; lastWrites = writes;
-    render();
+    const st = await api('GET', '/api/state');
+    if (!points || Object.keys(points).join() !== Object.keys(st.points).join()) indexDevices(st.points);
+    points = st.points;
+    if (st.auto !== auto || $('#auto').value !== String(st.auto)) { auto = st.auto; fillAuto(); }
+    renderPoints();
     setConn('ok', 'simui.running');
   } catch (e) {
     setConn('err', 'simui.down');
   }
 }
 
+// ---------- tự thay đổi giá trị: 0 = chỉ đặt bằng tay ----------
+function fillAuto() {
+  const choices = AUTO_CHOICES.includes(auto) ? AUTO_CHOICES : [...AUTO_CHOICES, auto].sort((a, b) => a - b);
+  $('#auto').replaceChildren(...choices.map(sec => {
+    const o = el('option', '', sec ? t('dash.auto_every', { s: sec }) : t('simui.auto_off'));
+    o.value = String(sec);
+    return o;
+  }));
+  $('#auto').value = String(auto);
+  $('#auto').classList.toggle('on', auto > 0);
+}
+
+$('#auto').onchange = async () => {
+  try {
+    await api('POST', '/api/auto', { interval: Number($('#auto').value) });
+    auto = Number($('#auto').value);
+  } catch (e) { /* giữ lựa chọn cũ */ }
+  fillAuto();
+};
+$('#q').oninput = () => { built = ''; renderPoints(); };
 $('#reset').onclick = async () => {
   if (!confirm(t('simui.confirm_reset'))) return;
   await api('POST', '/api/reset', {}); refresh();
 };
-$('#clear').onclick = async () => { await api('DELETE', '/api/writes'); refresh(); };
+window.onhashchange = () => { selected = selectedDevice(); renderPoints(); };
+document.addEventListener('keydown', (e) => {          // phím /: tìm thiết bị
+  if (e.key !== '/' || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  e.preventDefault();
+  $('#q').focus();
+});
 
 initI18n(() => {
   document.title = t('simui.title');
   setConn(...connState);
-  render(true);
+  built = ''; renderPoints();
+  fillAuto();
+  if (!$('#help').hidden) renderHelp('sim');
 }).then(() => {
+  initShell('sim');
+  fillAuto();
   document.title = t('simui.title');
   refresh();
   setInterval(refresh, 1000);

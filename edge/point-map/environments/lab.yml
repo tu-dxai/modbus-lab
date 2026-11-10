@@ -10,3 +10,13 @@
 addresses:
   "10.20.0.21:502": "127.0.1.21:5020"    # gateway điện: dong-ho-dien-01, dong-ho-dien-02
   "10.20.0.30:502": "127.0.1.30:5020"    # bess-01
+  "10.20.0.40:161": "127.0.1.40:1161"    # ups-01 (SNMP; cổng 161 cần quyền root nên lab dùng 1161)
+  "10.20.0.50:47808": "127.0.1.50:47808" # crah-01 (BACnet/IP)
+
+# Cổng serial thật -> cổng serial ảo do simulator tạo khi chạy (cặp pty nối với nhau, xem tools/simulator/vserial.py).
+# Collector và Telegraf (env lab) mở cổng bên phải như mở cổng USB-RS485 thật.
+serial:
+  "/dev/ttyUSB0": "var/serial/ttyUSB0"   # bus RS-485 của dong-ho-rs485-03
+
+# Client BACnet của collector trong lab: phải khác cổng thiết bị (cùng cổng thì gói tin vòng về chính client).
+bacnet_client: "127.0.0.1/8:47809"

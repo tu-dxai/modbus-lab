@@ -1,3 +1,6 @@
 pymodbus==3.16.2
+pyserial==3.5
+pysnmp==7.1.32
+bacpypes3==0.0.110
 pyyaml>=6.0
 pytest>=8.0
