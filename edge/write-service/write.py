@@ -70,7 +70,7 @@ def _write_bacnet(conns, d: dict, p: dict, value, state: dict) -> None:
     from bacnet_io import write_bacnet
     state["before"] = conns.read(d, p)
     try:
-        write_bacnet(d, p, value)
+        write_bacnet(d, p, value, getattr(conns, "frames", None))
     except Translatable as e:
         raise WriteFailed("write.device_rejected", code=e.params.get("detail", e.code)) from None
     state["after"] = conns.read(d, p)
@@ -112,7 +112,7 @@ def relinquish_guarded(cfg, conns, key, audit: AuditLog | None = None, actor: st
             raise WriteBlocked("write.not_bacnet", key=key)
         state["before"] = conns.read(d, p)
         try:
-            relinquish_bacnet(d, p)
+            relinquish_bacnet(d, p, getattr(conns, "frames", None))
         except Translatable as e:
             raise WriteFailed("write.device_rejected", code=e.params.get("detail", e.code)) from None
         state["after"] = conns.read(d, p)

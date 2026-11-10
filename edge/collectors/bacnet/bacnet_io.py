@@ -14,7 +14,7 @@ from bacpypes3.local.device import DeviceObject
 from bacpypes3.local.networkport import NetworkPortObject
 from bacpypes3.pdu import Address
 from bacpypes3.primitivedata import Null, ObjectIdentifier, Real
-import async_bridge
+import async_bridge, udp_trace
 from i18n import Translatable
 from modbus_io import DEFAULT_TIMEOUT, ReadError
 
@@ -38,20 +38,21 @@ def _kind(p: dict) -> str:
     return p["object"].split(",")[0].strip()
 
 
-async def _call(d: dict, p: dict, action, value=None, priority=None):
+async def _call(d: dict, p: dict, action, value=None, priority=None, frames=None):
     app = await _app(d["bacnet_client"])
     addr, oid = Address(f"{d['host']}:{d['port']}"), ObjectIdentifier(p["object"])
-    if action == "read":
-        coro = app.read_property(addr, oid, "present-value")
-    else:
-        coro = app.write_property(addr, oid, "present-value", value, priority=priority)
-    return await asyncio.wait_for(coro, d.get("timeout", DEFAULT_TIMEOUT))
+    with udp_trace.client(frames, d.get("site_address", f"{d['host']}:{d['port']}")):   # khung tin thô
+        if action == "read":
+            coro = app.read_property(addr, oid, "present-value")
+        else:
+            coro = app.write_property(addr, oid, "present-value", value, priority=priority)
+        return await asyncio.wait_for(coro, d.get("timeout", DEFAULT_TIMEOUT))
 
 
-def _run(d: dict, p: dict, action, value=None, priority=None):
+def _run(d: dict, p: dict, action, value=None, priority=None, frames=None):
     timeout = d.get("timeout", DEFAULT_TIMEOUT)
     try:
-        return async_bridge.run(_call(d, p, action, value, priority), timeout + 2)
+        return async_bridge.run(_call(d, p, action, value, priority, frames), timeout + 2)
     except (asyncio.TimeoutError, TimeoutError):
         raise ReadError("read.bacnet_no_answer", endpoint=f"{d['host']}:{d['port']}", s=timeout) from None
     except Translatable:
@@ -60,17 +61,18 @@ def _run(d: dict, p: dict, action, value=None, priority=None):
         raise BacnetRejected("read.bacnet_error", detail=str(e) or type(e).__name__) from None
 
 
-def read_bacnet(d: dict, p: dict) -> float:
-    value = _run(d, p, "read")
+def read_bacnet(d: dict, p: dict, frames=None) -> float:
+    """frames: FrameLog của collector để ghi khung tin thô (None = không ghi)."""
+    value = _run(d, p, "read", frames=frames)
     if _kind(p).startswith("binary"):
         return 1 if str(value) in ("active", "1") else 0
     return round(float(value), 6)
 
 
-def write_bacnet(d: dict, p: dict, value) -> None:
+def write_bacnet(d: dict, p: dict, value, frames=None) -> None:
     v = ("active" if value else "inactive") if _kind(p).startswith("binary") else Real(float(value))
-    _run(d, p, "write", v, p["priority"])
+    _run(d, p, "write", v, p["priority"], frames)
 
 
-def relinquish_bacnet(d: dict, p: dict) -> None:
-    _run(d, p, "write", Null(()), p["priority"])
+def relinquish_bacnet(d: dict, p: dict, frames=None) -> None:
+    _run(d, p, "write", Null(()), p["priority"], frames)

@@ -86,12 +86,17 @@ class Connections:
 
     def read(self, d: dict, p: dict) -> float:
         proto = d.get("protocol", "modbus")
-        if proto == "snmp":
-            from snmp_io import read_snmp
-            return read_snmp(d, p)
-        if proto == "bacnet":
-            from bacnet_io import read_bacnet
-            return read_bacnet(d, p)
+        if proto in ("snmp", "bacnet"):
+            try:
+                if proto == "snmp":
+                    from snmp_io import read_snmp
+                    return read_snmp(d, p, self.frames)
+                from bacnet_io import read_bacnet
+                return read_bacnet(d, p, self.frames)
+            except ReadError as e:
+                if e.code.endswith("_no_answer"):          # gửi đi mà không có phản hồi: ghi vào khung tin
+                    self.no_response(d)
+                raise
         try:
             return read_point(self.client(d), d, p)
         except ReadError:                              # thiết bị có trả lời (mã lỗi Modbus): đã ghi đủ cặp

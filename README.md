@@ -5,7 +5,7 @@ kiểm thử đặt và đứng yên tới khi đổi; simulator ghi lại mọi
 "với đầu vào X, client có ghi đúng Y vào đúng thiết bị không". Thiết bị giả nói đủ bốn kiểu kết nối của container:
 **Modbus TCP** (đồng hồ điện sau gateway, pin BESS), **Modbus RTU** qua cổng serial ảo (đồng hồ RS-485), **SNMP**
 (UPS) và **BACnet/IP** (điều hòa CRAH, ghi kèm mức ưu tiên và nhả lệnh). Kèm collector mẫu có trang web, công cụ ghi
-có rào chắn và nhật ký kiểm toán, bộ sinh cấu hình Telegraf từ Point Map, bộ kiểm tra Point Map và 238 bài kiểm thử
+có rào chắn và nhật ký kiểm toán, bộ sinh cấu hình Telegraf từ Point Map, bộ kiểm tra Point Map và 263 bài kiểm thử
 tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng Nhật**.
 
 ## Có gì trong thư mục
@@ -30,7 +30,8 @@ tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng N
 | `tools/simulator/snmp_agent.py`, `bacnet_device.py` | UPS giả (SNMP, UPS-MIB) và CRAH giả (BACnet/IP, mảng ưu tiên 16 mức) |
 | `tools/simulator/sim_state.py` | Giá trị hiện tại của mọi điểm và **nhật ký lệnh ghi** (nhân chứng) |
 | `tools/simulator/sim_control.py`, `control.html` | Kênh điều khiển HTTP và trang web đặt giá trị, xem lệnh ghi (cổng 5080) |
-| `edge/modbus/frames.py` | **Khung tin Modbus thô**: bắt từng byte gửi và nhận, tách trường, giải nghĩa ra giá trị điểm đo |
+| `edge/modbus/frames.py` | **Khung tin thô**: bắt từng byte gửi và nhận, tách trường, giải nghĩa ra giá trị điểm đo (FrameLog dùng chung) |
+| `edge/modbus/udp_trace.py`, `edge/snmp/snmp_frames.py`, `edge/collectors/bacnet/bacnet_frames.py` | Bắt byte UDP của SNMP / BACnet và tách trường từng gói |
 | `tools/simulator/simctl.py` | Điều khiển simulator từ code kiểm thử (`SimControl`) hoặc dòng lệnh (`make set/get/writes/reset`) |
 | `tools/codec/codec.py` | Mã hóa, giải mã số theo 4 kiểu byte order |
 | `tools/dashboard/collector.py` | Đọc mọi điểm, giải mã, kiểm tra cảnh báo, phục vụ trang web và API JSON (đọc và ghi) |
@@ -38,8 +39,8 @@ tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng N
 | `tools/web/ui.css`, `ui.js` | Giao diện dùng chung cho hai trang: bố cục một màn hình, cột thiết bị, bảng, màu trạng thái |
 | `tests/acceptance/` | 20 bài kiểm thử nghiệm thu, mã MB-xx khớp tài liệu nghiên cứu |
 | `tests/point_map/` | 53 bài kiểm thử bộ kiểm tra Point Map và môi trường, mỗi loại lỗi một bài |
-| `tests/simulator/` | 104 bài kiểm thử simulator: đặt giá trị, tự thay đổi, nhật ký lệnh ghi, khung tin thô, RTU, SNMP, BACnet |
-| `tests/tools/` | 34 bài kiểm thử collector: đọc khi bấm, tự đọc, ghi, nhả lệnh BACnet, khung tin phía client, song ngữ |
+| `tests/simulator/` | 127 bài kiểm thử simulator: đặt giá trị, tự thay đổi, nhật ký lệnh ghi, khung tin thô (cả SNMP, BACnet), RTU, SNMP, BACnet |
+| `tests/tools/` | 36 bài kiểm thử collector: đọc khi bấm, tự đọc, ghi, nhả lệnh BACnet, khung tin phía client, song ngữ |
 | `tests/telegraf/` | 8 bài kiểm thử cấu hình Telegraf sinh ra (chỉ kiểm cấu trúc, chưa chạy Telegraf thật) |
 | `tests/write_service/` | 8 bài kiểm thử nhật ký kiểm toán: ghi được, bị chặn, bị từ chối, ghi từ web |
 | `tests/translations/` | 11 bài kiểm thử từ điển: đủ vi và ja, khớp tham số, mọi khóa trang web và code dùng đều có |
@@ -211,10 +212,10 @@ Mỗi kết nối Modbus (TCP `host:port` hoặc cổng serial RTU) một khối
 lại. **Chưa chạy thử với Telegraf thật**: kiểm thử chỉ kiểm cấu trúc; trước khi dùng hãy chạy
 `telegraf --config <file> --test` với simulator.
 
-## Xem khung tin Modbus thô
+## Xem khung tin thô (Modbus, SNMP, BACnet)
 
 **Collector** (bên gửi yêu cầu và nhận phản hồi) bắt từng byte trên đường truyền, trước khi giải mã: trang
-`http://localhost:8080`, thẻ **Khung tin Modbus** phía dưới. Mỗi lần bấm Đọc/Ghi là đúng các cặp hỏi/đáp của thao
+`http://localhost:8080`, thẻ **Khung tin** phía dưới — đủ Modbus TCP / RTU, SNMP và BACnet/IP. Mỗi lần bấm Đọc/Ghi là đúng các cặp hỏi/đáp của thao
 tác đó; bấm một dòng để xem từng byte. Phía client còn thấy sự cố mà thiết bị không thấy: **không phản hồi**
 (gửi đi nhưng hết thời gian chờ) và **không kết nối được**. API: `GET /api/frames` của collector.
 
@@ -237,6 +238,35 @@ bằng `make frames` hoặc `SimControl().frames()` (API `/api/frames` của sim
   có lọc theo thiết bị, theo lệnh, chỉ lỗi, và nút tạm dừng.
 - Code kiểm thử: `SimControl().frames(device=..., function=..., errors=True)`; API `GET /api/frames`.
 - Simulator giữ 500 cặp gần nhất (`make sim ARGS="--frames 2000"` để giữ nhiều hơn); `make reset` xóa cả khung tin.
+
+**SNMP** (mã hóa BER: kiểu | độ dài | giá trị), cột Lệnh hiện `GET`:
+
+```
+  Gửi   30 2b | 02 01 01 | 04 06 70 75 62 6c 69 63 | a0 1e | 02 04 00 fb b4 f8 | 02 01 00 | 02 01 00 | 30 10 | 30 0e | 06 0a 2b 06 01 02 01 21 01 02 04 00 | 05 00
+        Gói SNMP | Phiên bản | Community | Loại PDU | Request ID | Mã lỗi | Vị trí lỗi | Danh sách biến | Biến | OID | Giá trị
+  Nhận  ... | a2 1f | 02 04 00 fb b4 f8 | ... | 06 0a 2b 06 01 02 01 21 01 02 04 00 | 02 01 64
+        64 = 100 (integer) × 1 → Mức pin = 100 %
+```
+
+`a0` là GET, `a2` là phản hồi; lệnh và phản hồi ghép theo Request ID. OID không có trên thiết bị trả `80 00`
+(noSuchObject) và được tô đỏ.
+
+**BACnet/IP** (BVLC | NPDU | APDU), cột Lệnh hiện `RP` (ReadProperty) / `WP` (WriteProperty):
+
+```
+  Gửi   81 | 0a | 00 1a | 01 | 04 | 02 | 44 | 01 | 0f | 0c 00 80 00 01 | 19 55 | 3e | 44 41 b0 00 00 | 3f | 49 08
+        BVLC | Chức năng BVLC | Độ dài gói | NPDU | Điều khiển NPDU | Loại APDU | Kích thước tối đa | Invoke ID | Dịch vụ | Đối tượng | Thuộc tính | Mở giá trị | Giá trị | Đóng giá trị | Mức ưu tiên
+  Nhận  81 | 0a | 00 09 | 01 | 00 | 20 | 01 | 0f      xác nhận đã ghi (Simple-ACK)
+        41 b0 00 00 = 22.0 (REAL) → Điểm đặt nhiệt độ gió cấp = 22.0 °C
+```
+
+`0c 00 80 00 01` là đối tượng analog-value,1; `19 55` là present-value; `44` mở đầu số REAL; `49 08` là mức ưu tiên 8.
+Nhả lệnh thì giá trị là `00` (NULL). Thiết bị từ chối thì phản hồi là gói Error, ví dụ `50 .. 0f 91 02 91 28`
+= property: write-access-denied. Lệnh và phản hồi ghép theo Invoke ID.
+
+Lọc theo loại lệnh: `make frames ARGS="--function get"`, `--function read-property`, `--function write-property`;
+API `?function=get`. pysnmp và bacpypes3 không có hook như `trace_packet` của pymodbus, nên `edge/modbus/udp_trace.py`
+bọc hàm gửi / nhận datagram của hai thư viện để chép byte (không đổi byte nào).
 
 ## Song ngữ tiếng Việt / tiếng Nhật
 
@@ -297,6 +327,7 @@ Client viết bằng ngôn ngữ khác thì gọi thẳng HTTP API (xem đầu f
 | Simulator | Giá trị đứng yên; đặt giá trị rồi đọc lại qua Modbus đúng kiểu, byte order, hệ số; đặt sai thì không đổi gì; nhật ký ghi lại lệnh được nhận, lệnh vào ô chỉ đọc, ô không khai báo, sai device_id; chờ lệnh ghi; dòng lệnh |
 | web | Trang chính, `GET /api/points`, ghi qua `POST /api/write`: hợp lệ, bị rào chắn chặn (kèm mã lỗi để dịch), yêu cầu sai dạng; `/i18n.json`, `/i18n.js`, `?lang=` |
 | Khung tin | Tách trường đúng byte trên đường truyền (FC03/04/06/16, lỗi, khung hỏng); ghép hỏi/đáp; giải nghĩa byte order, số âm, float; lọc, xóa, giới hạn số cặp; dòng lệnh |
+| Khung tin SNMP / BACnet | Tách trường đúng byte bắt được (GET, phản hồi, noSuchObject, ReadProperty, WriteProperty có ưu tiên, nhả lệnh, Error); gói hỏng không làm sập; bắt ở collector, simulator, khi timeout; lọc theo lệnh |
 | RTU | Cổng serial ảo; đọc, ghi, CRC đúng và sai; khung tin RTU ở collector và simulator; bus bận |
 | SNMP | Point Map (OID, version, community); đọc theo hệ số; OID không có; agent không trả lời; Telegraf `inputs.snmp` |
 | BACnet | Point Map (đối tượng, priority, client); đọc analog/binary; ghi kèm priority rồi nhả lệnh; thiết bị từ chối ghi input; simulator ghi nhận lệnh |

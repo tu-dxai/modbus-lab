@@ -1,4 +1,5 @@
-"""KHUNG TIN MODBUS TCP — từng byte client gửi tới và thiết bị trả về, trước khi giải mã.
+"""KHUNG TIN — từng byte client gửi tới và thiết bị trả về, trước khi giải mã: Modbus TCP / RTU (file này),
+SNMP (edge/snmp/snmp_frames.py), BACnet/IP (edge/collectors/bacnet/bacnet_frames.py). FrameLog dùng chung.
 
 Một khung tin Modbus TCP (ADU) gồm:
   MBAP 7 byte:  mã giao dịch (2) | giao thức, luôn 0 (2) | độ dài phần còn lại (2) | unit ID (1)
@@ -9,8 +10,9 @@ Ví dụ đọc điện áp (holding 0, 1 ô, hệ số 0.1):
   Gửi : 00 01 | 00 00 | 00 06 | 01 | 03 | 00 00 | 00 01
   Nhận: 00 01 | 00 00 | 00 05 | 01 | 03 | 02    | 09 01      09 01 = 2305 -> 230.5 V
 
-FrameLog nhận byte thô qua hook trace_packet của pymodbus (mỗi endpoint một hook), ghép lệnh với
-phản hồi theo (endpoint, mã giao dịch), và giữ `limit` cặp gần nhất. Dùng ở cả phía thiết bị
+FrameLog nhận byte thô qua hook trace_packet của pymodbus (mỗi endpoint một hook), hoặc khung tin SNMP /
+BACnet đã tách sẵn qua add_request / add_response (udp_trace.py), ghép lệnh với phản hồi theo
+(endpoint, mã giao dịch | request-id | invoke ID), và giữ `limit` cặp gần nhất. Dùng ở cả phía thiết bị
 (simulator) và phía client (collector); phía client còn ghi timeout và lỗi kết nối.
 """
 import threading, time
@@ -185,6 +187,30 @@ def explain(d: dict | None, req: dict, resp: dict) -> list[dict]:
     return out
 
 
+def _with_summary(part: dict | None, response: bool) -> dict | None:
+    """Modbus: tóm tắt tính ở đây; SNMP / BACnet: bộ tách đã kèm sẵn."""
+    if part is None:
+        return None
+    return part if "summary" in part else {**part, "summary": summary(part, response)}
+
+
+def _explain(proto: str, d, req: dict, resp: dict) -> list[dict]:
+    if proto == "snmp":
+        from snmp_frames import explain_snmp
+        return explain_snmp(d, req, resp)
+    if proto == "bacnet":
+        from bacnet_frames import explain_bacnet
+        return explain_bacnet(d, req, resp)
+    return explain(d, req, resp)
+
+
+def function_filter(text: str | None) -> int | str | None:
+    """Tham số ?function= của API: số là mã lệnh Modbus (3, 16), chữ là SNMP / BACnet (get, read-property...)."""
+    if text is None or text == "":
+        return None
+    return int(text) if text.isdigit() else text
+
+
 class FrameLog:
     """Các cặp hỏi/đáp gần nhất, dùng chung giữa luồng Modbus và luồng HTTP.
 
@@ -222,14 +248,20 @@ class FrameLog:
         return trace_packet
 
     def _requested(self, ep: str, site_ep: str, adu: bytes, rtu: bool = False) -> None:
-        req = parse_rtu(adu, response=False) if rtu else parse_adu(adu, response=False)
+        self.add_request(ep, site_ep, parse_rtu(adu, response=False) if rtu else parse_adu(adu, response=False))
+
+    def _answered(self, ep: str, adu: bytes, rtu: bool = False) -> None:
+        self.add_response(ep, parse_rtu(adu, response=True) if rtu else parse_adu(adu, response=True))
+
+    def add_request(self, ep: str, site_ep: str, req: dict) -> None:
+        """Lệnh (đã tách trường) chờ phản hồi, theo (endpoint, mã giao dịch)."""
         with self.lock:
             if len(self.pending) >= self.MAX_PENDING:
                 self.pending.clear()
             self.pending[(ep, req["transaction"])] = (time.perf_counter(), datetime.now(), req, site_ep)
 
-    def _answered(self, ep: str, adu: bytes, rtu: bool = False) -> None:
-        resp = parse_rtu(adu, response=True) if rtu else parse_adu(adu, response=True)
+    def add_response(self, ep: str, resp: dict) -> None:
+        """Phản hồi (đã tách trường): ghép với lệnh cùng mã giao dịch thành một mục."""
         with self.lock:
             item = self.pending.pop((ep, resp["transaction"]), None)
         if item is not None:
@@ -251,21 +283,24 @@ class FrameLog:
         unit = req["unit"] if req else device_id
         d = self.devices.get((ep, unit))
         fc = req["function"] if req else None
+        proto = (req or {}).get("protocol", "modbus")
+        if proto == "modbus":
+            fc_key = f"frame.fc.{fc}" if fc in KNOWN_FC else "frame.fc.other"
+        else:
+            fc_key = req["fc_key"]
         entry = {"at": at.isoformat(timespec="milliseconds"), "ms": round((time.perf_counter() - t0) * 1000, 2),
-                 "endpoint": ep, "site_endpoint": site_ep,
+                 "protocol": proto, "endpoint": ep, "site_endpoint": site_ep,
                  "device": d["name"] if d else None, "device_label": d.get("label") if d else None,
-                 "device_id": unit, "function": fc,
-                 "fc_key": f"frame.fc.{fc}" if fc in KNOWN_FC else "frame.fc.other",
+                 "device_id": unit, "function": fc, "fc_key": fc_key,
                  "exception": resp["exception"] if resp else None, "status": status,
-                 "request": {**req, "summary": summary(req, False)} if req else None,
-                 "response": {**resp, "summary": summary(resp, True)} if resp else None,
-                 "values": explain(d, req, resp) if req and resp else []}
+                 "request": _with_summary(req, False), "response": _with_summary(resp, True),
+                 "values": _explain(proto, d, req, resp) if req and resp else []}
         with self.lock:
             self.seq += 1
             self.entries.append({"seq": self.seq, **entry})
 
     def query(self, since: int | None = None, limit: int | None = None, device: str | None = None,
-              function: int | None = None, errors: bool = False) -> list[dict]:
+              function: int | str | None = None, errors: bool = False) -> list[dict]:
         def bad(e):
             return (e["exception"] is not None or e["status"] is not None
                     or (e["request"] and e["request"]["malformed"]) or (e["response"] and e["response"]["malformed"]))

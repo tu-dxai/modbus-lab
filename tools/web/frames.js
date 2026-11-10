@@ -1,4 +1,4 @@
-// KHUNG TIN MODBUS — danh sách cặp hỏi/đáp (một dòng mỗi cặp) + khung chi tiết từng byte.
+// KHUNG TIN (Modbus TCP / RTU, SNMP, BACnet/IP) — danh sách cặp hỏi/đáp (một dòng mỗi cặp) + chi tiết từng byte.
 // Dùng trên trang collector: "Gửi" là byte collector gửi tới thiết bị, "Nhận" là byte thiết bị trả về.
 // Cần /i18n.js và /ui.js trước. Trang gọi initFrames({ devices, deviceName, pointName }) rồi pollFrames()
 // sau mỗi lần đọc/ghi — không tự gọi định kỳ.
@@ -58,28 +58,56 @@ function frameBad(f) {
 }
 
 function frameDevice(f) {
-  return f.device ? FR.opts.deviceName(f.device)
-                  : t('frames.unknown_device', { id: f.device_id, endpoint: f.site_endpoint });
+  if (f.device) return FR.opts.deviceName(f.device);
+  return f.protocol && f.protocol !== 'modbus' ? t('frames.unknown_endpoint', { endpoint: f.site_endpoint })
+    : t('frames.unknown_device', { id: f.device_id, endpoint: f.site_endpoint });
+}
+
+// Cột "Lệnh": FC03 (Modbus) / GET (SNMP) / RP, WP (BACnet ReadProperty, WriteProperty).
+const FN_SHORT = { get: 'GET', 'get-next': 'GETNEXT', 'read-property': 'RP', 'write-property': 'WP' };
+function fnLabel(f) {
+  if (f.function === null || f.function === undefined) return '—';
+  if (typeof f.function === 'number') return `FC${String(f.function).padStart(2, '0')}`;
+  return FN_SHORT[f.function] || f.function;
+}
+
+// SNMP / BACnet: "OID 1.3.6…4.0 → Mức pin = 100 %" / "BACnet analog-value,1 ← 21.5 · P8 → …"
+function udpSummary(f) {
+  const r = f.request;
+  const ref = el('span', 'reg-ref');
+  const snmp = f.protocol === 'snmp';
+  const abbr = el('abbr', '', snmp ? 'OID' : 'BACnet');
+  abbr.title = t(snmp ? 'ui.oid_title' : 'ui.bacnet_title');
+  ref.append(abbr, ' ' + (r.ref || '?').replace(/^OID /, ''));
+  if (r.write) {
+    ref.append(r.write.value === null ? ' ← NULL' : ` ← ${fmtFrame(r.write.value)}`);
+    if (r.write.priority) ref.append(` · P${r.write.priority}`);
+  }
+  return ref;
 }
 
 // Tóm tắt ngắn kiểu công cụ Modbus: "IR 100–101 → Mức pin = 80 %"; câu đầy đủ xem khi rê chuột.
 function shortSummary(f) {
   const r = f.request;
   if (!r) return [null, t(f.status.key, f.status.params)];
+  if (f.protocol && f.protocol !== 'modbus' && !r.malformed) return [udpSummary(f), valueText(f)];
   if (r.malformed || (!r.start && r.start !== 0)) return [null, t(r.summary.key, r.summary.params)];
   const area = f.function === 4 ? 'IR' : 'HR';
   const range = r.quantity > 1 ? `${r.start}–${r.start + r.quantity - 1}` : String(r.start);
   let ref = `${area} ${range}`;
   if (f.function === 6 || f.function === 16) ref += ` ← ${r.registers.join(', ')}`;
-  let rest = '';
+  return [ref, valueText(f)];
+}
+
+function valueText(f) {
   if (f.values.length) {
     const v = f.values[0];
-    rest = ` → ${FR.opts.pointName(v.key)} = ${fmtFrame(v.value)} ${v.unit}` +
+    return ` → ${FR.opts.pointName(v.key)} = ${fmtFrame(v.value)} ${v.unit}` +
            (f.values.length > 1 ? ` · ${t('ui.more_values', { n: f.values.length - 1 })}` : '');
-  } else if (f.status) {
-    rest = ` → ${t(f.status.key, f.status.params)}`;
   }
-  return [ref, rest];
+  if (f.status) return ` → ${t(f.status.key, f.status.params)}`;
+  if (f.response && f.exception !== null) return ` → ${t(f.response.summary.key, f.response.summary.params)}`;
+  return '';
 }
 
 function resultMark(f) {
@@ -89,7 +117,7 @@ function resultMark(f) {
     text = t(f.request ? 'frames.no_response' : 'frames.unreachable');
     title = t(f.status.key, f.status.params);
   } else {
-    text = `${t('common.error')}${f.exception !== null ? ' ' + hex2(f.exception) : ''}`;
+    text = t('common.error') + (typeof f.exception === 'number' ? ' ' + hex2(f.exception) : '');
     title = t(f.response.summary.key, f.response.summary.params);
   }
   const b = el('span', 'badge err', text);
@@ -99,11 +127,12 @@ function resultMark(f) {
 
 function frameRow(f) {
   const row = el('tr', 'clickable' + (f.seq === FR.sel ? ' sel' : ''));
-  const fc = el('td', 'mono', f.function ? `FC${String(f.function).padStart(2, '0')}` : '—');
+  const fc = el('td', 'mono', fnLabel(f));
   fc.title = f.function ? t(f.fc_key) : '';
   const [ref, rest] = shortSummary(f);
   const sum = el('td', 'sum');
-  if (ref) sum.append(regRef(ref.slice(0, 2), ref.slice(3)), el('span', 'val', rest));   // HR/IR có chú thích
+  if (ref instanceof Node) sum.append(ref, el('span', 'val', rest));                       // OID / BACnet
+  else if (ref) sum.append(regRef(ref.slice(0, 2), ref.slice(3)), el('span', 'val', rest));   // HR/IR có chú thích
   else sum.textContent = rest;
   sum.title = f.request ? t(f.request.summary.key, f.request.summary.params) +
     (f.response ? ` · ${t(f.response.summary.key, f.response.summary.params)}` : '') : '';
@@ -117,11 +146,15 @@ function frameRow(f) {
   return row;
 }
 
+// Trường tô đỏ khi phản hồi báo lỗi (Modbus mã lỗi, SNMP error-status / noSuchObject, BACnet Error).
+const ERR_FIELDS = new Set(['exception', 'function', 'error_status', 'error_index', 'error_class', 'error_code',
+                            'reason', 'apdu_type']);
+
 function byteLine(dir, cls, part, bad) {
   const line = el('div', 'line');
   const bytes = el('div', 'bytes');
   for (const f of part.fields) {
-    const g = el('span', 'grp' + (bad && (f.name === 'exception' || f.name === 'function') ? ' exc' : ''));
+    const g = el('span', 'grp' + (bad && ERR_FIELDS.has(f.name) ? ' exc' : ''));
     g.append(el('b', '', f.hex), el('i', '', t(`frame.f.${f.name}`)));   // khóa ghép: frame.f.transaction, ...
     bytes.append(g);
   }
@@ -156,7 +189,8 @@ function renderDetail() {
   if (f.request) box.append(...(f.response ? byteLine(t('frames.received'), 'recv', f.response, bad)
                                            : missingLine(t('frames.received'), 'recv', f.status)));
   for (const v of f.values) {
-    const key = v.hex.split(' ').length === 2 ? 'frame.explain_16' : 'frame.explain_32';
+    const key = v.kind ? `frame.explain_${v.kind}`
+      : v.hex.split(' ').length === 2 ? 'frame.explain_16' : 'frame.explain_32';
     const text = t(key, { hex: '\u0000', raw: v.raw, scale: v.scale, name: tr(v.label) || v.key,
       value: fmtFrame(v.value), unit: v.unit, type: v.type, order: v.byte_order });
     const [before, after] = text.split('\u0000');               // tách để đặt byte vào thẻ code monospace

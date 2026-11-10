@@ -26,7 +26,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from audit import DEFAULT_PATH as AUDIT_PATH, AuditLog
-from frames import FrameLog
+from frames import FrameLog, function_filter
 from i18n import SCRIPT, ApiError, Translatable, by_language, t
 from modbus_io import Connections, address
 from point_map import DEFAULT_PATH, device_meta, load_or_exit, point_ref
@@ -189,7 +189,7 @@ class Web(BaseHTTPRequestHandler):
         try:
             since = int(q["since"]) if "since" in q else None
             limit = int(q["limit"]) if "limit" in q else None
-            function = int(q["function"]) if "function" in q else None
+            function = function_filter(q.get("function"))
         except ValueError:
             return self.reply(400, {"ok": False, **ApiError("api.bad_frames_query").as_json()})
         self.reply(200, {"frames": self.frames.query(since, limit, q.get("device"), function,

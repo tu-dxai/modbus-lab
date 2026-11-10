@@ -16,7 +16,7 @@ help:
 	@echo "  make set P=dong-ho-dien-01.dien_ap V=231.5   đặt giá trị cho thiết bị giả"
 	@echo "  make get [P=...]   xem giá trị hiện tại của simulator"
 	@echo "  make writes [P=...]  xem các lệnh ghi client đã gửi tới"
-	@echo "  make frames [D=thiết-bị]  xem khung tin Modbus thô: từng byte gửi và nhận, kèm giải nghĩa"
+	@echo "  make frames [D=thiết-bị]  xem khung tin thô Modbus / SNMP / BACnet: từng byte gửi và nhận, kèm giải nghĩa"
 	@echo "  make auto [S=5]    xem / đặt tự thay đổi giá trị mỗi S giây (S=0: chỉ đặt bằng tay)"
 	@echo "  make reset         về giá trị khởi đầu, xóa nhật ký lệnh ghi"
 	@echo "  Simulator ở địa chỉ khác: SIM_URL=http://host:5080 make set ..."

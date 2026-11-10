@@ -20,6 +20,7 @@ from bacpypes3.local.device import DeviceObject
 from bacpypes3.local.networkport import NetworkPortObject
 from bacpypes3.primitivedata import Null
 from point_map import bacnet_object
+import udp_trace
 
 logging.getLogger("bacpypes3").setLevel(logging.CRITICAL)
 
@@ -115,7 +116,8 @@ def start_device(state, d: dict) -> None:
                                vendorIdentifier=999)
             port = NetworkPortObject(f"{d['host']}/32:{d['port']}", objectIdentifier=("network-port", 1),
                                      objectName="NP-1")
-            Application.from_object_list([dev, port, *objects])
+            app = Application.from_object_list([dev, port, *objects])
+            udp_trace.device(app.link_layers[port.objectIdentifier].server, state.frames, ep, site_ep)
             ready.set()
             await asyncio.Future()
         asyncio.run(main())

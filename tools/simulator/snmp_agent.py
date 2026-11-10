@@ -11,6 +11,7 @@ from pysnmp.entity.rfc3413 import cmdrsp, context
 from pysnmp.proto import rfc1902
 from pysnmp.proto.api import v2c
 from pysnmp.smi import instrum
+import udp_trace
 
 SNMP_CLASS = {"integer": rfc1902.Integer32, "gauge32": rfc1902.Gauge32, "counter32": rfc1902.Counter32}
 
@@ -54,7 +55,10 @@ def start_agent(state, d: dict) -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         eng = engine.SnmpEngine()
-        config.add_transport(eng, udp.DOMAIN_NAME, udp.UdpTransport().open_server_mode((d["host"], d["port"])))
+        transport = udp.UdpTransport().open_server_mode((d["host"], d["port"]))
+        ep = f"{d['host']}:{d['port']}"
+        udp_trace.device(transport, state.frames, ep, d.get("site_address", ep))     # khung tin thô (make frames)
+        config.add_transport(eng, udp.DOMAIN_NAME, transport)
         s = d["snmp"]
         config.add_v1_system(eng, "lab-area", s["community"])
         model = 1 if str(s["version"]) == "1" else 2

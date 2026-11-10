@@ -80,7 +80,7 @@ class SimControl:
         q = {k: v for k, v in (("point", point), ("since", since)) if v is not None}
         return self._call("GET", "/api/writes" + (f"?{urlencode(q)}" if q else ""))["writes"]
 
-    def frames(self, device: str | None = None, function: int | None = None, errors: bool = False,
+    def frames(self, device: str | None = None, function: int | str | None = None, errors: bool = False,
                since: int | None = None, limit: int | None = None) -> list[dict]:
         """Các cặp khung tin hỏi/đáp thô gần nhất, cũ trước mới sau (xem tools/simulator/frames.py)."""
         q = {k: v for k, v in (("device", device), ("function", function), ("since", since), ("limit", limit))
@@ -140,7 +140,8 @@ def _print_frames(frames: list[dict]) -> None:
         print(t("frames.empty"))
     for f in frames:
         target = (f["device_label"] or {}).get("vi") or f["device"] \
-            or t("frames.unknown_device", id=f["device_id"], endpoint=f["site_endpoint"])
+            or (t("frames.unknown_device", id=f["device_id"], endpoint=f["site_endpoint"])
+                if f.get("protocol", "modbus") == "modbus" else t("frames.unknown_endpoint", endpoint=f["site_endpoint"]))
         print(f"#{f['seq']:<5} {f['at'][11:]}  {target} @ {f['site_endpoint']} · {t(f['fc_key'])} · {f['ms']} ms")
         for label, part in ((t("frames.sent"), f["request"]), (t("frames.received"), f["response"])):
             hexs = " | ".join(x["hex"] for x in part["fields"])
@@ -148,7 +149,8 @@ def _print_frames(frames: list[dict]) -> None:
             print(f"  {label:<5} {hexs}      {t(s['key'], **s['params'])}")
             print(f"  {'':<5} {' | '.join(t('frame.f.' + x['name']) for x in part['fields'])}")
         for v in f["values"]:
-            key = "frame.explain_16" if len(v["hex"].split()) == 2 else "frame.explain_32"
+            key = f"frame.explain_{v['kind']}" if v.get("kind") else \
+                "frame.explain_16" if len(v["hex"].split()) == 2 else "frame.explain_32"
             name = (v["label"] or {}).get("vi") or v["key"]
             print(f"  {'':<5} " + t(key, hex=v["hex"], raw=v["raw"], scale=v["scale"], name=name,
                                      value=v["value"], unit=v["unit"], type=v["type"], order=v["byte_order"]))
@@ -167,9 +169,9 @@ def main(argv: list[str]) -> int:
     w.add_argument("--point")
     w.add_argument("--since", type=int)
     sub.add_parser("clear-writes", help="xóa nhật ký lệnh ghi")
-    fr = sub.add_parser("frames", help="xem khung tin Modbus thô (byte gửi và nhận)")
+    fr = sub.add_parser("frames", help="xem khung tin thô Modbus / SNMP / BACnet (byte gửi và nhận)")
     fr.add_argument("--device")
-    fr.add_argument("--function", type=int)
+    fr.add_argument("--function", help="mã lệnh Modbus (3, 16) hoặc get / read-property / write-property")
     fr.add_argument("--errors", action="store_true", help="chỉ khung tin lỗi")
     fr.add_argument("--limit", type=int, default=20)
     sub.add_parser("clear-frames", help="xóa khung tin")

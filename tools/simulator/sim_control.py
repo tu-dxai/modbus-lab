@@ -22,6 +22,7 @@ import json, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from frames import function_filter
 from i18n import SCRIPT, ApiError, by_language
 from sim_state import BadValue, SimState, UnknownPoint
 
@@ -75,7 +76,7 @@ class Control(BaseHTTPRequestHandler):
             try:
                 since = int(q["since"]) if "since" in q else None
                 limit = int(q["limit"]) if "limit" in q else None
-                function = int(q["function"]) if "function" in q else None
+                function = function_filter(q.get("function"))
             except ValueError:
                 return self.reply(400, {"ok": False, **ApiError("api.bad_frames_query").as_json()})
             self.reply(200, {"frames": self.state.frames.query(

@@ -53,9 +53,16 @@ def test_read_is_captured_on_the_client_side(web, frames_url):
 def test_read_all_gives_one_pair_per_point(cfg, web, frames_url):
     call(web + "/api/read", {})
     _, r = call(frames_url)
-    modbus = [d for d in cfg["devices"] if d.get("protocol", "modbus") == "modbus"]   # khung tin chỉ bắt Modbus
-    assert len(r["frames"]) == sum(len(d["points"]) for d in modbus)
+    assert len(r["frames"]) == sum(len(d["points"]) for d in cfg["devices"])      # cả Modbus, SNMP, BACnet
     assert [f["seq"] for f in r["frames"]] == sorted(f["seq"] for f in r["frames"])
+    assert {f["protocol"] for f in r["frames"]} == {"modbus", "snmp", "bacnet"}
+
+
+@pytest.mark.parametrize("function,device", [("get", "ups-01"), ("read-property", "crah-01")])
+def test_filter_snmp_and_bacnet_frames(web, frames_url, function, device):
+    call(web + "/api/read", {"device": device})
+    _, r = call(frames_url + f"?function={function}&device={device}")
+    assert r["frames"] and all(f["function"] == function and f["values"] for f in r["frames"])
 
 
 def test_write_is_captured_with_readback(web, frames_url):

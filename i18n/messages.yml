@@ -126,12 +126,51 @@ frame.f.values:          { vi: "Giá trị ghi",        ja: "書き込み値" }
 frame.f.exception:       { vi: "Mã lỗi",             ja: "例外コード" }
 frame.f.raw:             { vi: "Byte thô",           ja: "生データ" }
 frame.f.crc:             { vi: "CRC",                ja: "CRC" }
+# SNMP (BER: kiểu | độ dài | giá trị)
+frame.f.message:         { vi: "Gói SNMP",           ja: "SNMP メッセージ" }
+frame.f.version:         { vi: "Phiên bản",          ja: "バージョン" }
+frame.f.community:       { vi: "Community",          ja: "コミュニティ" }
+frame.f.pdu:             { vi: "Loại PDU",           ja: "PDU 種別" }
+frame.f.request_id:      { vi: "Request ID",         ja: "リクエストID" }
+frame.f.error_status:    { vi: "Mã lỗi",             ja: "エラーステータス" }
+frame.f.error_index:     { vi: "Vị trí lỗi",         ja: "エラーインデックス" }
+frame.f.varbinds:        { vi: "Danh sách biến",     ja: "変数リスト" }
+frame.f.varbind:         { vi: "Biến",               ja: "変数" }
+frame.f.oid:             { vi: "OID",                ja: "OID" }
+# BACnet/IP (BVLC | NPDU | APDU)
+frame.f.bvlc_type:       { vi: "BVLC",               ja: "BVLC" }
+frame.f.bvlc_function:   { vi: "Chức năng BVLC",     ja: "BVLC 機能" }
+frame.f.bvlc_length:     { vi: "Độ dài gói",         ja: "パケット長" }
+frame.f.npdu_version:    { vi: "NPDU",               ja: "NPDU" }
+frame.f.npdu_control:    { vi: "Điều khiển NPDU",    ja: "NPDU 制御" }
+frame.f.npdu_dest:       { vi: "Mạng đích",          ja: "宛先ネットワーク" }
+frame.f.npdu_source:     { vi: "Mạng nguồn",         ja: "送信元ネットワーク" }
+frame.f.hop_count:       { vi: "Hop count",          ja: "ホップ数" }
+frame.f.apdu_type:       { vi: "Loại APDU",          ja: "APDU 種別" }
+frame.f.max_apdu:        { vi: "Kích thước tối đa",  ja: "最大 APDU" }
+frame.f.invoke_id:       { vi: "Invoke ID",          ja: "インボークID" }
+frame.f.segment:         { vi: "Phân đoạn",          ja: "セグメント" }
+frame.f.service:         { vi: "Dịch vụ",            ja: "サービス" }
+frame.f.object:          { vi: "Đối tượng",          ja: "オブジェクト" }
+frame.f.property:        { vi: "Thuộc tính",         ja: "プロパティ" }
+frame.f.array_index:     { vi: "Chỉ số mảng",        ja: "配列インデックス" }
+frame.f.open_tag:        { vi: "Mở giá trị",         ja: "値の開始" }
+frame.f.close_tag:       { vi: "Đóng giá trị",       ja: "値の終了" }
+frame.f.priority:        { vi: "Mức ưu tiên",        ja: "優先度" }
+frame.f.error_class:     { vi: "Lớp lỗi",            ja: "エラークラス" }
+frame.f.error_code:      { vi: "Mã lỗi",             ja: "エラーコード" }
+frame.f.reason:          { vi: "Lý do",              ja: "理由" }
 
 frame.fc.3:              { vi: "Đọc holding register (FC03)", ja: "保持レジスタ読み出し（FC03）" }
 frame.fc.4:              { vi: "Đọc input register (FC04)",   ja: "入力レジスタ読み出し（FC04）" }
 frame.fc.6:              { vi: "Ghi một thanh ghi (FC06)",    ja: "単一レジスタ書き込み（FC06）" }
 frame.fc.16:             { vi: "Ghi nhiều thanh ghi (FC16)",  ja: "複数レジスタ書き込み（FC16）" }
 frame.fc.other:          { vi: "Mã lệnh khác",               ja: "その他の機能コード" }
+frame.fc.snmp_get:       { vi: "SNMP GET: đọc giá trị theo OID", ja: "SNMP GET：OID で値を読み出し" }
+frame.fc.snmp_other:     { vi: "Lệnh SNMP khác",             ja: "その他の SNMP 操作" }
+frame.fc.bacnet_read:    { vi: "BACnet ReadProperty: đọc một thuộc tính", ja: "BACnet ReadProperty：プロパティ読み出し" }
+frame.fc.bacnet_write:   { vi: "BACnet WriteProperty: ghi một thuộc tính kèm mức ưu tiên", ja: "BACnet WriteProperty：優先度付きでプロパティ書き込み" }
+frame.fc.bacnet_other:   { vi: "Dịch vụ BACnet khác",        ja: "その他の BACnet サービス" }
 
 frame.sum.read:          { vi: "đọc {table} từ ô {start}, {count} ô", ja: "{table} をアドレス {start} から {count} 個読み出し" }
 frame.sum.registers:     { vi: "trả {count} thanh ghi",  ja: "レジスタ {count} 個を応答" }
@@ -141,6 +180,24 @@ frame.sum.write_multi:   { vi: "ghi {count} ô từ ô {start}: {values}", ja: "
 frame.sum.write_multi_ack: { vi: "xác nhận đã ghi {count} ô từ ô {start}", ja: "アドレス {start} から {count} 個の書き込みを確認" }
 frame.sum.malformed:     { vi: "khung tin không đúng định dạng Modbus TCP", ja: "Modbus TCP の形式に合わないフレーム" }
 frame.sum.other:         { vi: "mã lệnh {fc}, chưa giải nghĩa", ja: "機能コード {fc}（未解析）" }
+frame.sum.malformed_snmp: { vi: "gói không đúng định dạng SNMP", ja: "SNMP の形式に合わないパケット" }
+frame.sum.snmp_get:      { vi: "đọc OID {oid}",               ja: "OID {oid} を読み出し" }
+frame.sum.snmp_value:    { vi: "trả {oid} = {value} ({type})", ja: "{oid} = {value}（{type}）を応答" }
+frame.sum.snmp_no_oid:   { vi: "thiết bị không có OID {oid} ({type})", ja: "機器に OID {oid} がありません（{type}）" }
+frame.sum.snmp_error:    { vi: "lỗi SNMP {status} ở biến thứ {index}", ja: "SNMP エラー {status}（{index} 番目の変数）" }
+frame.sum.snmp_other:    { vi: "lệnh SNMP {pdu} {oid}, chưa giải nghĩa", ja: "SNMP {pdu} {oid}（未解析）" }
+frame.sum.malformed_bacnet: { vi: "gói không đúng định dạng BACnet/IP", ja: "BACnet/IP の形式に合わないパケット" }
+frame.sum.bacnet_read:   { vi: "đọc {object} · {property}",   ja: "{object} の {property} を読み出し" }
+frame.sum.bacnet_value:  { vi: "trả {object} · {property} = {value}", ja: "{object} の {property} = {value} を応答" }
+frame.sum.bacnet_write:  { vi: "ghi {object} · {property} = {value}, mức ưu tiên {priority}",
+                           ja: "{object} の {property} に {value} を書き込み（優先度 {priority}）" }
+frame.sum.bacnet_relinquish: { vi: "nhả lệnh {object} · {property} ở mức ưu tiên {priority} (ghi NULL)",
+                           ja: "{object} の {property} の優先度 {priority} を解除（NULL を書き込み）" }
+frame.sum.bacnet_ack:    { vi: "xác nhận đã ghi (Simple-ACK)", ja: "書き込み確認（Simple-ACK）" }
+frame.sum.bacnet_error:  { vi: "lỗi {cls}: {code}",            ja: "エラー {cls}：{code}" }
+frame.sum.bacnet_reject: { vi: "thiết bị từ chối gói (Reject), lý do {reason}", ja: "機器がパケットを拒否（Reject）、理由 {reason}" }
+frame.sum.bacnet_abort:  { vi: "giao dịch bị hủy (Abort), lý do {reason}", ja: "トランザクション中止（Abort）、理由 {reason}" }
+frame.sum.bacnet_other:  { vi: "dịch vụ {service}, chưa giải nghĩa", ja: "サービス {service}（未解析）" }
 
 # Mã lỗi Modbus (exception code) trong phản hồi lỗi: mã lệnh + 0x80, kèm một byte mã lỗi.
 frame.exc.1:             { vi: "lỗi 01 — thiết bị không hỗ trợ mã lệnh này", ja: "例外 01：不正な機能コード" }
@@ -160,11 +217,15 @@ frame.explain_16:        { vi: "{hex} = {raw} (×{scale}) → {name} = {value} {
                            ja: "{hex} = {raw}（×{scale}）→ {name} = {value} {unit}" }
 frame.explain_32:        { vi: "{hex} ({type}, byte order {order}) → {name} = {value} {unit}",
                            ja: "{hex}（{type}、バイト順 {order}）→ {name} = {value} {unit}" }
+frame.explain_snmp:      { vi: "{hex} = {raw} ({type}) × {scale} → {name} = {value} {unit}",
+                           ja: "{hex} = {raw}（{type}）× {scale} → {name} = {value} {unit}" }
+frame.explain_bacnet:    { vi: "{hex} = {raw} ({type}) → {name} = {value} {unit}",
+                           ja: "{hex} = {raw}（{type}）→ {name} = {value} {unit}" }
 
 # Trang điều khiển: khu khung tin. "Gửi/Nhận" nhìn từ phía client, giống công cụ Modbus thông dụng.
 frames.hint:             { vi: "Từng byte trên đường truyền, trước khi giải mã. Gửi: collector gửi tới thiết bị · Nhận: thiết bị trả về collector.",
                            ja: "デコード前の通信バイト列です。送信：コレクター → 機器 · 受信：機器 → コレクター。" }
-frames.title:            { vi: "Khung tin Modbus",   ja: "Modbus フレーム" }
+frames.title:            { vi: "Khung tin",          ja: "通信フレーム" }
 frames.no_response:      { vi: "Không phản hồi",     ja: "応答なし" }
 frames.unreachable:      { vi: "Không kết nối",      ja: "接続不可" }
 frames.sent:        { vi: "Gửi",                ja: "送信" }
@@ -178,6 +239,7 @@ frames.clear:      { vi: "Xóa",                ja: "消去" }
 frames.empty:      { vi: "Chưa có khung tin nào.", ja: "フレームはまだありません。" }
 frames.paused:     { vi: "Đang tạm dừng — khung tin mới không hiện thêm.", ja: "一時停止中 — 新しいフレームは表示されません。" }
 frames.unknown_device: { vi: "Unit ID {id} không có ở {endpoint}", ja: "{endpoint} に Unit ID {id} はありません" }
+frames.unknown_endpoint: { vi: "Không có thiết bị nào ở {endpoint}", ja: "{endpoint} に機器はありません" }
 
 # ---------- thành phần giao diện dùng chung (tools/web/ui.css) ----------
 ui.search:               { vi: "Tìm thiết bị…",      ja: "機器を検索…" }
