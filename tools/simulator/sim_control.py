@@ -12,6 +12,7 @@
   DELETE /api/frames       xóa khung tin
   POST   /api/reset        về giá trị khởi đầu và xóa nhật ký
   POST   /api/auto         {"interval": 5} tự thay đổi giá trị mỗi 5 giây; {"interval": 0} chỉ đặt bằng tay
+  POST   /api/power        {"device": "bess-01", "on": false} tắt thiết bị (giả lập mất điện); true để bật lại
   GET    /i18n.json        từ điển song ngữ vi/ja cho trang điều khiển
   GET    /i18n.js          mã song ngữ dùng chung (i18n/i18n.js)
   GET    /ui.css, /ui.js   giao diện dùng chung (tools/web/)
@@ -24,7 +25,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from frames import function_filter
 from i18n import SCRIPT, ApiError, by_language
-from sim_state import BadValue, SimState, UnknownPoint
+from sim_state import BadValue, SimState, UnknownDevice, UnknownPoint
 
 PAGE = Path(__file__).with_name("control.html")
 WEB = Path(__file__).resolve().parents[1] / "web"     # giao diện dùng chung với trang collector: ui.css, ui.js
@@ -91,6 +92,8 @@ class Control(BaseHTTPRequestHandler):
             return self.reply(200, {"ok": True})
         if path == "/api/auto":
             return self.set_auto()
+        if path == "/api/power":
+            return self.set_power()
         if path != "/api/state":
             return self.not_found()
         try:
@@ -107,6 +110,21 @@ class Control(BaseHTTPRequestHandler):
             return self.reply(400, {"ok": False, **e.as_json()})
         print(f"  << Đặt giá trị: {', '.join(f'{k} = {v}' for k, v in changed.items())}")
         self.reply(200, {"ok": True, "points": changed})
+
+    def set_power(self):
+        try:
+            req = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)))
+            name, on = req["device"], req["on"]
+            if not isinstance(name, str) or not isinstance(on, bool):
+                raise ValueError
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return self.reply(400, {"ok": False, **ApiError("api.bad_power_request").as_json()})
+        try:
+            self.state.set_power(name, on)
+        except UnknownDevice as e:
+            return self.reply(404, {"ok": False, **e.as_json()})
+        print(f"  !! {'Bật' if on else 'Tắt'} thiết bị {name}")
+        self.reply(200, {"ok": True, "device": name, "on": on})
 
     def set_auto(self):
         try:

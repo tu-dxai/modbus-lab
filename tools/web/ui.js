@@ -154,6 +154,7 @@ const ICONS = {
   trash: 'M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z M20 20l-4.2-4.2',
   undo: 'M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 0 12h-3',
+  power: 'M12 3v8 M7.05 6.05a7 7 0 1 0 9.9 0',
 };
 
 function icon(name, cls) {

@@ -20,6 +20,10 @@ class BadValue(Translatable):
     """Giá trị không ghi vừa thanh ghi theo kiểu dữ liệu và hệ số của điểm."""
 
 
+class UnknownDevice(Translatable):
+    """Thiết bị không có trong Point Map."""
+
+
 def _round(v: float) -> float:
     return round(v, 6)                                 # bỏ đuôi sai số dấu phẩy động khi nhân hệ số
 
@@ -53,6 +57,8 @@ class SimState:
         self.anchor: dict[str, float] = {}                 # giá trị đặt gần nhất: tâm dao động khi tự thay đổi
         self.hooks: dict[str, list] = {}                   # điểm -> hàm gọi khi đặt bằng tay (thiết bị BACnet)
         self.reset_hooks: list = []                        # hàm gọi khi đặt lại (xóa mảng ưu tiên BACnet)
+        self.off: set[str] = set()                         # thiết bị đang tắt (giả lập mất điện)
+        self.power_hooks: dict[str, list] = {}             # thiết bị -> hàm gọi khi bật/tắt (server TCP riêng)
         self.log: list[dict] = []
         self.pending: dict[tuple, dict] = {}               # (endpoint, device_id, transaction_id) -> lệnh chờ phản hồi
         self.seq = 0                                       # tăng mãi, không về 0 khi reset, để client hỏi "since"
@@ -70,6 +76,23 @@ class SimState:
         self.frames.clear()
         for hook in getattr(self, "reset_hooks", []):
             hook()
+        for name in list(getattr(self, "off", ())):         # đặt lại = bật lại mọi thiết bị
+            self.set_power(name, True)
+
+    # ---------- bật / tắt thiết bị ----------
+    def is_on(self, name: str) -> bool:
+        return name not in self.off
+
+    def set_power(self, name: str, on: bool) -> None:
+        """Bật / tắt thiết bị. Thiết bị tắt phản ứng như mất điện, theo kiểu kết nối (xem sim.py)."""
+        if name not in {d["name"] for d in self.cfg["devices"]}:
+            raise UnknownDevice("sim.unknown_device", device=name)
+        if self.is_on(name) == on:
+            return
+        with self.lock:
+            (self.off.discard if on else self.off.add)(name)
+        for hook in self.power_hooks.get(name, []):
+            hook(on)
 
     def _quantize(self, key: str, value) -> float:
         """Giá trị thiết bị thật sẽ báo sau khi lưu (ví dụ 231.55 V lưu x10 -> 231.6)."""
@@ -187,7 +210,7 @@ class SimState:
                    "device_meta": device_meta(d),
                    "endpoint": endpoint(d), "site_endpoint": d.get("site_address", endpoint(d)),
                    "table": p.get("table"), "address": p.get("address"), "type": p.get("type"), "unit": p.get("unit", ""),
-                   "writable": bool(p.get("writable")), "value": values[key]}
+                   "writable": bool(p.get("writable")), "value": values[key], "on": self.is_on(d["name"])}
             for k in ("allowed", "min", "max", "priority"):
                 if k in p:
                     row[k] = p[k]

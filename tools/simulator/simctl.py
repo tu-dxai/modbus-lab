@@ -123,6 +123,15 @@ class SimControl:
     def set_auto(self, interval: int) -> None:
         self._call("POST", "/api/auto", {"interval": interval})
 
+    def power(self, device: str, on: bool) -> dict:
+        """Bật / tắt thiết bị giả. Tắt = mất điện: IP riêng từ chối kết nối, sau gateway trả 0B,
+        RS-485 / SNMP / BACnet im lặng. reset() bật lại tất cả."""
+        return self._call("POST", "/api/power", {"device": device, "on": on})
+
+    def off_devices(self) -> list[str]:
+        """Các thiết bị đang tắt."""
+        return sorted({p["device"] for p in self.get().values() if not p.get("on", True)})
+
     def reset(self) -> None:
         self._call("POST", "/api/reset", {})
 
@@ -229,6 +238,9 @@ def main(argv: list[str]) -> int:
     sub.add_parser("reset", help="về giá trị khởi đầu và xóa nhật ký")
     au = sub.add_parser("auto", help="xem / đặt chế độ tự thay đổi giá trị (giây, 0 = chỉ đặt bằng tay)")
     au.add_argument("interval", nargs="?", type=int)
+    pw = sub.add_parser("power", help="xem thiết bị đang tắt / bật, tắt một thiết bị: power <thiết bị> on|off")
+    pw.add_argument("device", nargs="?")
+    pw.add_argument("state", nargs="?", choices=("on", "off"))
     args = ap.parse_args(argv)
     ctl = SimControl(args.url)
     try:
@@ -261,6 +273,14 @@ def main(argv: list[str]) -> int:
                 ctl.set_auto(args.interval)
             n = ctl.auto()
             print(f"Tự thay đổi giá trị: mỗi {n} giây" if n else "Tự thay đổi giá trị: tắt (chỉ đặt bằng tay)")
+        elif args.cmd == "power":
+            if args.device and not args.state:
+                ap.error("cần on hoặc off, ví dụ: power bess-01 off")
+            if args.device:
+                ctl.power(args.device, args.state == "on")
+                print(f"Đã {'bật' if args.state == 'on' else 'tắt'} {args.device}")
+            off = ctl.off_devices()
+            print(f"Đang tắt: {', '.join(off)}" if off else "Mọi thiết bị đang bật.")
         elif args.cmd == "reset":
             ctl.reset()
             print("Đã đặt lại mọi giá trị và xóa nhật ký.")

@@ -34,6 +34,7 @@
         <div class="panel-head">
           <h2 id="title"></h2><span id="sub" class="sub"></span>
           <div class="tools">
+            <span id="power-slot"></span>
             <span class="small muted hide-sm" data-i18n="simui.set_hint"></span>
             <label class="chk small" data-i18n-title="simui.auto_hint"><span data-i18n="simui.auto"></span>
               <select id="auto" class="field"></select></label>
@@ -108,6 +109,41 @@ function indexDevices(pts) {
   }
 }
 
+// ---------- bật / tắt thiết bị (giả lập mất điện) ----------
+function deviceOn(name) {
+  const p = Object.values(points || {}).find(x => x.device === name);
+  return !p || p.on !== false;
+}
+
+// Thiết bị tắt phản ứng theo kiểu kết nối, giống sim.py: IP riêng / sau gateway / im lặng (RS-485, SNMP, BACnet).
+function offEffect(d) {
+  if (d.meta.protocol !== 'modbus' || d.endpoint.startsWith('rtu:')) return t('simui.off_silent');
+  const shared = [...devices.values()].filter(x => x.endpoint === d.endpoint).length > 1;
+  return t(shared ? 'simui.off_gateway' : 'simui.off_refuse');
+}
+
+function powerButton(d) {
+  const on = deviceOn(d.name);
+  const b = el('button', 'btn sm power' + (on ? '' : ' off'));
+  b.append(icon('power'), el('span', '', t(on ? 'simui.power_on' : 'simui.power_off')));
+  b.title = on ? t('simui.turn_off_hint', { effect: offEffect(d) }) : t('simui.turn_on_hint');
+  b.onclick = async (e) => {
+    e.stopPropagation();
+    b.disabled = true;
+    try { await api('POST', '/api/power', { device: d.name, on: !on }); }
+    catch (err) { alert(err.message); }
+    refresh();
+  };
+  return b;
+}
+
+function offNote(d) {
+  const row = el('tr', 'off-note'), td = el('td', '', t('simui.off_note', { effect: offEffect(d) }));
+  td.colSpan = 4;
+  row.append(td);
+  return row;
+}
+
 function limitText(p) {
   if (p.allowed) return t('simui.allowed', { values: p.allowed });
   if ('min' in p) return t('simui.range', { min: p.min, max: p.max });
@@ -134,6 +170,7 @@ function pointRow(key, p) {
   cell.append(num, edit);
   value.append(cell);
   row.append(name, reg, lim, value);
+  if (!deviceOn(p.device)) row.classList.add('off');
   rows[key] = { tr: row, num, unit: p.unit };
   return row;
 }
@@ -150,14 +187,20 @@ function build() {
     for (const d of list) {
       const head = el('tr', 'devrow'), td = el('td', '', tr(d.label) || d.name);
       td.colSpan = 4;
-      td.append(el('span', 'meta', `${d.name} · ${d.endpoint}${siteSuffix(d)} · ${deviceShort(d.meta)}`));
+      td.append(el('span', 'meta', `${d.name} · ${d.endpoint}${siteSuffix(d)} · ${deviceShort(d.meta)}`),
+                powerButton(d));
       head.append(td);
-      body.append(head, ...d.points.map(([k, p]) => pointRow(k, p)));
+      body.append(head);
+      if (!deviceOn(d.name)) body.append(offNote(d));
+      body.append(...d.points.map(([k, p]) => pointRow(k, p)));
     }
+    $('#power-slot').replaceChildren();
   } else if (list.length) {
     const d = list[0];
     $('#title').textContent = tr(d.label) || d.name;
     $('#sub').textContent = `${d.name} · ` + deviceMetaText(d, d.meta, siteSuffix(d));
+    $('#power-slot').replaceChildren(powerButton(d));
+    if (!deviceOn(d.name)) body.append(offNote(d));
     body.append(...d.points.map(([k, p]) => pointRow(k, p)));
   }
   if (!body.children.length) {
@@ -170,7 +213,8 @@ function sidebar() {
   renderSidebar($('#devlist'), [...devices.values()], {
     selected, query: $('#q').value.trim(),
     allMeta: t('ui.n_points', { n: Object.keys(points || {}).length }),
-    itemMeta: d => deviceShort(d.meta),
+    itemMeta: d => deviceOn(d.name) ? deviceShort(d.meta) : t('simui.off_short'),
+    itemDot: d => deviceOn(d.name) ? 'ok' : 'idle',
     onSelect: name => { selected = name; selectDevice(name); renderPoints(); },
   });
 }
@@ -190,7 +234,8 @@ function updateValues() {
 function renderPoints() {
   if (!points) return;
   if (selected !== ALL && !devices.has(selected)) selected = ALL;
-  const shape = JSON.stringify([I18N.lang, selected, $('#q').value, Object.keys(points)]);
+  const off = Object.values(points).filter(p => p.on === false).map(p => p.device);   // bật/tắt: dựng lại bảng
+  const shape = JSON.stringify([I18N.lang, selected, $('#q').value, Object.keys(points), off]);
   if (shape !== built) { build(); built = shape; sidebar(); }
   updateValues();
 }

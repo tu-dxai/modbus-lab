@@ -84,6 +84,8 @@ write.readback_mismatch: { vi: "đọc lại được {after}, không khớp gi�
 read.modbus_exception:   { vi: "mã lỗi Modbus {code}", ja: "Modbus 例外コード {code}" }
 read.unreachable:        { vi: "không kết nối được {endpoint}", ja: "{endpoint} に接続できません" }
 read.failed:             { vi: "không đọc được: {detail}", ja: "読み取りに失敗しました：{detail}" }
+read.skipped:            { vi: "bỏ qua: {device} không trả lời ở điểm trước trong lượt này",
+                           ja: "スキップ：{device} はこの周期の前の計測点で応答しませんでした" }
 read.snmp_no_answer:     { vi: "{endpoint} không trả lời SNMP sau {s} giây (sai community hoặc mất kết nối)",
                            ja: "{endpoint} が {s} 秒以内に SNMP 応答しません（コミュニティ名の誤りまたは通信断）" }
 read.snmp_error:         { vi: "thiết bị báo lỗi SNMP: {status}", ja: "機器が SNMP エラーを返しました：{status}" }
@@ -95,6 +97,7 @@ write.not_bacnet:        { vi: "chỉ điểm BACnet ghi được mới nhả l�
 
 # ---------- lỗi kênh điều khiển simulator ----------
 sim.unknown_points:      { vi: "không có điểm {keys} trong Point Map", ja: "計測点 {keys} は Point Map にありません" }
+sim.unknown_device:      { vi: "không có thiết bị '{device}' trong Point Map", ja: "機器 '{device}' は Point Map にありません" }
 sim.bad_value:           { vi: "{key}: giá trị {value} không vừa kiểu {type} với hệ số {scale}",
                            ja: "{key}：値 {value} は型 {type}（係数 {scale}）に収まりません" }
 
@@ -103,6 +106,8 @@ api.not_found:           { vi: "không có đường dẫn này", ja: "このパ
 api.bad_write_request:   { vi: "yêu cầu cần JSON gồm point (tên điểm) và value (số)",
                            ja: "point（計測点名）と value（数値）を含む JSON が必要です" }
 api.bad_state_request:   { vi: "yêu cầu cần JSON dạng tên điểm: giá trị", ja: "「計測点名: 値」形式の JSON が必要です" }
+api.bad_power_request:   { vi: "yêu cầu cần JSON gồm device (tên thiết bị) và on (true hoặc false)",
+                           ja: "device（機器名）と on（true または false）を含む JSON が必要です" }
 api.bad_since:           { vi: "since phải là số nguyên", ja: "since は整数で指定してください" }
 api.bad_read_request:    { vi: "yêu cầu đọc cần JSON, có thể kèm device hoặc point", ja: "読み取り要求は JSON（device または point を指定可）が必要です" }
 api.unknown_target:      { vi: "không có thiết bị hoặc điểm '{target}'", ja: "機器または計測点 '{target}' はありません" }
@@ -287,6 +292,19 @@ simui.auto:              { vi: "Tự thay đổi",        ja: "自動変化" }
 simui.auto_off:          { vi: "Tắt — chỉ đặt bằng tay", ja: "オフ（手動のみ）" }
 simui.auto_hint:         { vi: "Điểm có biên độ dao động (sim.noise) tự đổi quanh giá trị đặt gần nhất; điểm client ghi được giữ nguyên",
                            ja: "変動幅（sim.noise）のある計測点は、直近の設定値を中心に自動で変化します。クライアント書き込み可の点は変化しません" }
+simui.power_on:          { vi: "Đang bật",           ja: "電源オン" }
+simui.power_off:         { vi: "Đã tắt",             ja: "電源オフ" }
+simui.off_short:         { vi: "tắt",                ja: "オフ" }
+simui.turn_off_hint:     { vi: "Tắt thiết bị (giả lập mất điện): {effect}", ja: "機器をオフ（停電を模擬）：{effect}" }
+simui.turn_on_hint:      { vi: "Bật lại thiết bị",   ja: "機器を再びオンにする" }
+simui.off_note:          { vi: "Thiết bị đang tắt — {effect}. Giá trị đặt lúc này sẽ có hiệu lực khi bật lại.",
+                           ja: "機器はオフです — {effect}。今設定した値は再びオンにしたときに有効になります。" }
+simui.off_refuse:        { vi: "client bị từ chối kết nối TCP (thiết bị có IP riêng)",
+                           ja: "クライアントの TCP 接続は拒否されます（専用 IP の機器）" }
+simui.off_gateway:       { vi: "gateway vẫn chạy và trả mã lỗi 0B cho thiết bị này; thiết bị khác cùng gateway vẫn đọc được",
+                           ja: "ゲートウェイは動作中で、この機器には例外コード 0B を返します。同じゲートウェイの他の機器は読み取れます" }
+simui.off_silent:        { vi: "không trả lời, client chờ hết timeout",
+                           ja: "応答せず、クライアントはタイムアウトまで待ちます" }
 simui.set_hint:          { vi: "Bấm ✎ để đặt giá trị theo đơn vị kỹ thuật · Enter lưu · Esc hủy", ja: "✎ で工学単位の値を設定 · Enter 保存 · Esc 取消" }
 
 # ---------- icon, thu/mở cột, sửa tại chỗ ----------

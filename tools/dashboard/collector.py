@@ -63,19 +63,24 @@ def poll_once(conns, cfg, device: str | None = None, point: str | None = None) -
                 down.add(ep)
             if ep in down:
                 conns.unreachable(d)                   # một mục khung tin cho thiết bị, không lặp theo điểm
+            silent = False                             # thiết bị không trả lời: bỏ qua các điểm còn lại trong lượt
             for p in targets:
                 key = f"{d['name']}.{p['name']}"
                 row = {"unit": p.get("unit", ""), "at": time.strftime("%H:%M:%S")}
                 if ep in down:
                     row.update(value=None, ok=False, **_error_row("read.unreachable", endpoint=ep))
+                elif silent:
+                    row.update(value=None, ok=False, **_error_row("read.skipped", device=d["name"]))
                 else:
                     try:
                         row.update(value=round(conns.read(d, p), 2), ok=True)
-                    except Translatable as e:      # thiết bị trả mã lỗi Modbus
+                    except Translatable as e:      # thiết bị trả mã lỗi (có trả lời), hoặc SNMP/BACnet hết giờ
                         row.update(value=None, ok=False, **_error_row(e.code, **e.params))
+                        silent = e.code.endswith("_no_answer")
                     except Exception as e:         # timeout, rớt kết nối giữa chừng
                         row.update(value=None, ok=False,
                                    **_error_row("read.failed", detail=str(e) or type(e).__name__))
+                        silent = True
                 rows[key] = row
     result = {"read": len(rows), "ok_count": sum(r["ok"] for r in rows.values()),
               "ms": round((time.perf_counter() - t0) * 1000, 1)}
@@ -119,7 +124,7 @@ def refresh_environment(cfg: dict, conns) -> bool:
     return True
 
 
-def _error_row(code: str, **params) -> dict:
+def _error_row(code: str, /, **params) -> dict:
     """Lỗi của một điểm: error tiếng Việt cho dòng lệnh, code + params để trang web dịch."""
     return {"error": t(code, **params), "code": code, "params": params}
 

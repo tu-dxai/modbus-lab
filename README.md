@@ -5,7 +5,7 @@ kiểm thử đặt và đứng yên tới khi đổi; simulator ghi lại mọi
 "với đầu vào X, client có ghi đúng Y vào đúng thiết bị không". Thiết bị giả nói đủ bốn kiểu kết nối của container:
 **Modbus TCP** (đồng hồ điện sau gateway, pin BESS), **Modbus RTU** qua cổng serial ảo (đồng hồ RS-485), **SNMP**
 (UPS) và **BACnet/IP** (điều hòa CRAH, ghi kèm mức ưu tiên và nhả lệnh). Kèm collector mẫu có trang web, công cụ ghi
-có rào chắn và nhật ký kiểm toán, bộ sinh cấu hình Telegraf từ Point Map, bộ kiểm tra Point Map và 263 bài kiểm thử
+có rào chắn và nhật ký kiểm toán, bộ sinh cấu hình Telegraf từ Point Map, bộ kiểm tra Point Map và 286 bài kiểm thử
 tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng Nhật**.
 
 ## Có gì trong thư mục
@@ -39,9 +39,9 @@ tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng N
 | `tools/web/ui.css`, `ui.js` | Giao diện dùng chung cho hai trang: bố cục một màn hình, cột thiết bị, bảng, màu trạng thái |
 | `tests/acceptance/` | 20 bài kiểm thử nghiệm thu, mã MB-xx khớp tài liệu nghiên cứu |
 | `tests/point_map/` | 53 bài kiểm thử bộ kiểm tra Point Map và môi trường, mỗi loại lỗi một bài |
-| `tests/simulator/` | 127 bài kiểm thử simulator: đặt giá trị, tự thay đổi, nhật ký lệnh ghi, khung tin thô (cả SNMP, BACnet), RTU, SNMP, BACnet |
-| `tests/tools/` | 36 bài kiểm thử collector: đọc khi bấm, tự đọc, ghi, nhả lệnh BACnet, khung tin phía client, song ngữ |
-| `tests/telegraf/` | 8 bài kiểm thử cấu hình Telegraf sinh ra (chỉ kiểm cấu trúc, chưa chạy Telegraf thật) |
+| `tests/simulator/` | 142 bài kiểm thử simulator: đặt giá trị, tự thay đổi, bật/tắt thiết bị, nhật ký lệnh ghi, khung tin thô (cả SNMP, BACnet), RTU, SNMP, BACnet |
+| `tests/tools/` | 43 bài kiểm thử collector: đọc khi bấm, tự đọc, ghi, nhả lệnh BACnet, khung tin phía client, song ngữ |
+| `tests/telegraf/` | 9 bài kiểm thử cấu hình Telegraf sinh ra (chỉ kiểm cấu trúc, chưa chạy Telegraf thật) |
 | `tests/write_service/` | 8 bài kiểm thử nhật ký kiểm toán: ghi được, bị chặn, bị từ chối, ghi từ web |
 | `tests/translations/` | 11 bài kiểm thử từ điển: đủ vi và ja, khớp tham số, mọi khóa trang web và code dùng đều có |
 | `tests/conftest.py` | Bật simulator kiểm thử (môi trường lab, cổng 5021), dùng chung cho mọi bài |
@@ -120,8 +120,23 @@ make set P=dong-ho-dien-01.nhiet_do_tu V=31.5   # tạo tình huống: tủ đi�
 make get                                         # xem giá trị hiện tại
 make writes                                      # client đã ghi gì? (P=... để lọc một điểm)
 make auto S=10                                   # tự thay đổi mỗi 10 giây (S=0: chỉ đặt bằng tay)
-make reset                                       # về giá trị khởi đầu, xóa nhật ký
+make power D=bess-01 S=off                       # tắt thiết bị (giả lập mất điện); S=on bật lại
+make reset                                       # về giá trị khởi đầu, xóa nhật ký, bật lại mọi thiết bị
 ```
+
+**Bật / tắt thiết bị** (nút **Đang bật / Đã tắt** ở đầu mỗi thiết bị, `make power`, `POST /api/power`): thiết bị
+tắt phản ứng như mất điện, theo kiểu kết nối, để kiểm edge xử lý thiết bị mất kết nối:
+
+| Thiết bị | Khi tắt, client thấy |
+|---|---|
+| Có IP riêng (một mình một `host:port`, ví dụ `bess-01`) | bị từ chối kết nối TCP; kết nối đang mở bị cắt |
+| Sau gateway (chung `host:port`, ví dụ `dong-ho-dien-02`) | gateway vẫn trả lời: mã lỗi **0B**; thiết bị khác cùng gateway vẫn đọc được |
+| RS-485, SNMP, BACnet | không trả lời, chờ hết `timeout` |
+
+Thiết bị tắt không thực thi lệnh nào (lệnh ghi không đổi giá trị; ghi qua gateway được nhật ký ghi lại với mã 0B).
+Giá trị đặt lúc thiết bị tắt có hiệu lực khi bật lại. `make reset` bật lại mọi thiết bị. Collector gặp một thiết bị
+không trả lời thì bỏ qua các điểm còn lại của thiết bị đó trong lượt ("bỏ qua: ... không trả lời"), để một thiết bị
+mất điện không làm cả lượt đọc chờ timeout cho từng điểm.
 
 Giá trị được làm tròn đúng như thiết bị thật lưu: đặt `231.55` V vào ô `uint16` hệ số 0.1 thì thiết bị báo `231.6`.
 Giá trị không vừa thanh ghi (ví dụ 7000 V > 6553.5) bị từ chối. Điểm chỉ đọc vẫn chỉ đọc đối với client Modbus;
@@ -333,6 +348,7 @@ Client viết bằng ngôn ngữ khác thì gọi thẳng HTTP API (xem đầu f
 | Point Map | Ô nhớ đè nhau (tính cả kiểu 32 bit chiếm 2 ô), byte_order sai, type sai, điểm ghi được thiếu giới hạn, thiếu unit, thiếu trường bắt buộc; host/port/device_id/timeout sai; trùng device_id hoặc khác timeout sau cùng gateway; file môi trường thiếu, thừa, trùng địa chỉ; simulator và collector từ chối khởi động |
 | Mạng | Gateway phục vụ nhiều thiết bị theo device_id; cùng device_id ở hai địa chỉ là hai thiết bị; thiết bị cùng gateway dùng chung kết nối; một địa chỉ mất kết nối không ảnh hưởng địa chỉ khác |
 | Simulator | Giá trị đứng yên; đặt giá trị rồi đọc lại qua Modbus đúng kiểu, byte order, hệ số; đặt sai thì không đổi gì; nhật ký ghi lại lệnh được nhận, lệnh vào ô chỉ đọc, ô không khai báo, sai device_id; chờ lệnh ghi; dòng lệnh |
+| Bật / tắt | Thiết bị IP riêng từ chối kết nối và cắt kết nối đang mở; sau gateway trả 0B, không thực thi lệnh ghi, thiết bị cùng gateway vẫn chạy; RS-485 / SNMP / BACnet im lặng; đặt lại bật lại tất cả; collector bỏ qua phần còn lại của thiết bị không trả lời và không sập khi gặp mã lỗi Modbus |
 | web | Trang chính, `GET /api/points`, ghi qua `POST /api/write`: hợp lệ, bị rào chắn chặn (kèm mã lỗi để dịch), yêu cầu sai dạng; `/i18n.json`, `/i18n.js`, `?lang=` |
 | Khung tin | Tách trường đúng byte trên đường truyền (FC03/04/06/16, lỗi, khung hỏng); ghép hỏi/đáp; giải nghĩa byte order, số âm, float; lọc, xóa, giới hạn số cặp; dòng lệnh |
 | Khung tin SNMP / BACnet | Tách trường đúng byte bắt được (GET, phản hồi, noSuchObject, ReadProperty, WriteProperty có ưu tiên, nhả lệnh, Error); gói hỏng không làm sập; bắt ở collector, simulator, khi timeout; lọc theo lệnh |

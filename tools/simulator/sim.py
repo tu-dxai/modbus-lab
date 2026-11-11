@@ -15,6 +15,13 @@ Hai vai trò:
   2. Nhân chứng: ghi nhật ký mọi lệnh ghi Modbus nhận được, kể cả lệnh bị từ chối (ô chỉ đọc, ô không
      khai báo, sai device_id), để kiểm tra client đã ghi gì, vào đâu.
 
+Bật / tắt thiết bị (trang điều khiển, make power, POST /api/power) — thiết bị tắt phản ứng như mất điện, theo kiểu
+kết nối:
+  - thiết bị có IP riêng (một mình một host:port):  đóng server TCP, client bị từ chối kết nối;
+  - thiết bị sau gateway (chung host:port):          gateway vẫn chạy, trả mã lỗi 0B cho thiết bị đó;
+  - RS-485, SNMP, BACnet:                            im lặng, client chờ hết timeout.
+Thiết bị tắt không thực thi lệnh nào: lệnh ghi không đổi giá trị.
+
 Dùng API SimData/SimDevice của pymodbus 3.16 (API cũ sẽ bị gỡ ở bản 4):
   - ô không khai báo trong Point Map -> thiết bị trả mã lỗi 02
   - ô không có `writable: true`      -> thiết bị từ chối ghi, mã lỗi 02
@@ -22,7 +29,9 @@ Dùng API SimData/SimDevice của pymodbus 3.16 (API cũ sẽ bị gỡ ở bả
 import argparse, asyncio, logging, threading, time, warnings
 from functools import partial
 from pymodbus import FramerType
-from pymodbus.server import StartAsyncSerialServer, StartAsyncTcpServer
+from pymodbus.constants import ExcCodes
+from pymodbus.pdu import ExceptionResponse
+from pymodbus.server import ModbusTcpServer, StartAsyncSerialServer
 from pymodbus.simulator import DataType, SimData, SimDevice
 from codec import SIZE
 from point_map import DEFAULT_PATH, device_meta, load_or_exit, point_ref
@@ -57,6 +66,59 @@ def build_device(d, state):
                      action=partial(action, state, d))
 
 
+class _GatewayNoResponse:
+    """Thay cho lệnh gửi tới thiết bị đang tắt sau gateway: không đụng tới thanh ghi, trả mã lỗi 0B
+    (gateway target device failed to respond) như gateway thật khi thiết bị phía sau không trả lời."""
+
+    def __init__(self, pdu):
+        self.dev_id, self.transaction_id, self.function_code = pdu.dev_id, pdu.transaction_id, pdu.function_code
+
+    async def datastore_update(self, context, dev_id):
+        return ExceptionResponse(self.function_code, ExcCodes.GATEWAY_NO_RESPONSE)
+
+
+def power_guard(state, devs: list[dict], silent: bool, witness):
+    """Hook trace_pdu: lệnh tới thiết bị đang tắt không được thực thi.
+
+    silent=True (bus RS-485, thiết bị có IP riêng): bỏ lệnh, không trả lời. silent=False (sau gateway): trả 0B.
+    pymodbus thực thi PDU mà hook trả về; trả None thì bỏ qua lệnh.
+    """
+    names = {d["device_id"]: d["name"] for d in devs}
+
+    def trace_pdu(sending: bool, pdu):
+        name = None if sending else names.get(pdu.dev_id)
+        if name is not None and not state.is_on(name):
+            if silent:
+                return None
+            witness(False, pdu)                        # nhân chứng vẫn thấy lệnh, và phản hồi 0B
+            return _GatewayNoResponse(pdu)
+        return witness(sending, pdu)
+    return trace_pdu
+
+
+class _TcpEndpoint:
+    """Server Modbus TCP của một địa chỉ, chạy trên vòng lặp riêng; tắt / mở lại được (thiết bị có IP riêng)."""
+
+    def __init__(self, devices, address, **kwargs):
+        self.devices, self.address, self.kwargs, self.server = devices, address, kwargs, None
+        self.loop = asyncio.new_event_loop()
+        threading.Thread(target=self.loop.run_forever, daemon=True).start()
+        self.power(True)
+
+    def power(self, on: bool) -> None:
+        asyncio.run_coroutine_threadsafe(self._open() if on else self._close(), self.loop).result(5)
+
+    async def _open(self):
+        if self.server is None:
+            self.server = ModbusTcpServer(self.devices, address=self.address, **self.kwargs)
+            await self.server.serve_forever(background=True)
+
+    async def _close(self):
+        if self.server is not None:                    # đóng cổng nghe và mọi kết nối đang mở
+            await self.server.shutdown()
+            self.server = None
+
+
 class Simulator:
     """Simulator đang chạy: state để đọc/đặt trực tiếp, control_url nếu có bật kênh điều khiển."""
 
@@ -87,18 +149,21 @@ def start(cfg, control_port=None, control_host="127.0.0.1", frames=500, auto=0) 
             start_device(state, devs[0])
             continue
         devices = [build_device(d, state) for d in devs]
-        hooks = {"trace_pdu": state.tracer(ep, site_ep)}
-        if devs[0].get("transport") == "rtu":            # bus RS-485: cổng serial ảo, client mở đầu kia
+        rtu, gateway = devs[0].get("transport") == "rtu", len(devs) > 1
+        guard = power_guard(state, devs, silent=not gateway, witness=state.tracer(ep, site_ep))
+        if rtu:                                          # bus RS-485: cổng serial ảo, client mở đầu kia
             s = devs[0]["serial"]
             line = VirtualSerial(s["port"])
             server = StartAsyncSerialServer(context=devices, port=line.device_path, framer=FramerType.RTU,
                                             baudrate=s["baudrate"], parity=s.get("parity", "N"),
                                             stopbits=s.get("stop_bits", 1), bytesize=s.get("bytesize", 8),
-                                            trace_packet=state.frames.tracer(ep, site_ep, rtu=True), **hooks)
-        else:
-            server = StartAsyncTcpServer(context=devices, address=(devs[0]["host"], devs[0]["port"]),
-                                         trace_packet=state.frames.tracer(ep, site_ep), **hooks)
-        threading.Thread(target=partial(asyncio.run, server), daemon=True).start()
+                                            trace_packet=state.frames.tracer(ep, site_ep, rtu=True), trace_pdu=guard)
+            threading.Thread(target=partial(asyncio.run, server), daemon=True).start()
+            continue
+        tcp = _TcpEndpoint(devices, (devs[0]["host"], devs[0]["port"]),
+                           trace_packet=state.frames.tracer(ep, site_ep), trace_pdu=guard)
+        if not gateway:                                  # thiết bị có IP riêng: tắt = không còn gì nghe ở địa chỉ đó
+            state.power_hooks.setdefault(devs[0]["name"], []).append(tcp.power)
     control_url = None
     if control_port is not None:
         from sim_control import serve

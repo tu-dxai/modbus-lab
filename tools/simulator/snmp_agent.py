@@ -58,6 +58,9 @@ def start_agent(state, d: dict) -> None:
         transport = udp.UdpTransport().open_server_mode((d["host"], d["port"]))
         ep = f"{d['host']}:{d['port']}"
         udp_trace.device(transport, state.frames, ep, d.get("site_address", ep))     # khung tin thô (make frames)
+        receive = transport.datagram_received
+        transport.datagram_received = lambda data, addr: (                # thiết bị tắt: không nghe thấy gì
+            receive(data, addr) if state.is_on(d["name"]) else None)
         config.add_transport(eng, udp.DOMAIN_NAME, transport)
         s = d["snmp"]
         config.add_v1_system(eng, "lab-area", s["community"])

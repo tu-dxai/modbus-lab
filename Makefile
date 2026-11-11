@@ -3,7 +3,7 @@ PY = .venv/bin/python
 # pytest.ini giữ cùng danh sách này.
 export PYTHONPATH := tools/codec:tools/simulator:tools/dashboard:edge/write-service:edge/point-map:edge/modbus:edge/snmp:edge/collectors/telegraf:edge/collectors/bacnet:i18n
 
-.PHONY: help setup setup-uv sim set get writes frames auto reset collect once write audit telegraf test i18n-export
+.PHONY: help setup setup-uv sim set get writes frames auto power reset collect once write audit telegraf test i18n-export
 
 help:
 	@echo "Cài đặt"
@@ -18,7 +18,8 @@ help:
 	@echo "  make writes [P=...]  xem các lệnh ghi client đã gửi tới"
 	@echo "  make frames [D=thiết-bị]  xem khung tin thô Modbus / SNMP / BACnet: từng byte gửi và nhận, kèm giải nghĩa"
 	@echo "  make auto [S=5]    xem / đặt tự thay đổi giá trị mỗi S giây (S=0: chỉ đặt bằng tay)"
-	@echo "  make reset         về giá trị khởi đầu, xóa nhật ký lệnh ghi"
+	@echo "  make power [D=bess-01 S=off|on]  xem / tắt / bật thiết bị (giả lập mất điện)"
+	@echo "  make reset         về giá trị khởi đầu, xóa nhật ký lệnh ghi, bật lại mọi thiết bị"
 	@echo "  Simulator ở địa chỉ khác: SIM_URL=http://host:5080 make set ..."
 	@echo ""
 	@echo "Đọc và ghi (mặc định môi trường lab; ARGS=\"--env site\" để dùng thiết bị thật)"
@@ -60,6 +61,9 @@ frames:
 
 auto:
 	$(PY) tools/simulator/simctl.py auto $(S)
+
+power:
+	$(PY) tools/simulator/simctl.py power $(D) $(S)
 
 reset:
 	$(PY) tools/simulator/simctl.py reset

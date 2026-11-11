@@ -76,6 +76,12 @@ button, input, select { font: inherit; color: inherit; }
 .btn.primary:hover:not(:disabled) { background: var(--accent-2); color: var(--on-accent); }
 .btn.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .btn.sm { padding: 2px 9px; font-size: 13px; }
+/* bật / tắt thiết bị giả: đang bật = xanh, đã tắt = đỏ; hàng của thiết bị tắt mờ đi */
+.btn.power { color: var(--ok); border-color: var(--ok); background: var(--ok-bg); }
+.btn.power.off { color: var(--err); border-color: var(--err-line); background: var(--err-bg); }
+.grid tr.off td { opacity: .5; }
+.grid tr.off-note td { background: var(--err-bg); color: var(--err); font-size: 13px; padding: 7px 12px; }
+.grid .devrow .btn.power { float: right; margin: -2px 0; }
 .field { border: 1px solid var(--line-2); background: var(--panel); border-radius: 7px; padding: 4px 8px; min-width: 0; }
 .field:focus { outline: 2px solid var(--sel-line); outline-offset: -1px; border-color: var(--accent); }
 select.field.on { border-color: var(--accent); background: var(--sel); color: var(--accent-2); font-weight: 600; }

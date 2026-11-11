@@ -117,7 +117,14 @@ def start_device(state, d: dict) -> None:
             port = NetworkPortObject(f"{d['host']}/32:{d['port']}", objectIdentifier=("network-port", 1),
                                      objectName="NP-1")
             app = Application.from_object_list([dev, port, *objects])
-            udp_trace.device(app.link_layers[port.objectIdentifier].server, state.frames, ep, site_ep)
+            server = app.link_layers[port.objectIdentifier].server
+            udp_trace.device(server, state.frames, ep, site_ep)
+            receive = server.confirmation
+
+            async def confirmation(pdu):               # thiết bị tắt: không nghe thấy gì, không trả lời
+                if state.is_on(d["name"]):
+                    await receive(pdu)
+            server.confirmation = confirmation
             ready.set()
             await asyncio.Future()
         asyncio.run(main())
