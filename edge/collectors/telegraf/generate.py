@@ -5,7 +5,8 @@ Chạy:  make telegraf                 (môi trường site: địa chỉ thật
        python generate.py --env site --out telegraf.conf
 
 Modbus (plugin inputs.modbus, configuration_type = "request"):
-  - mỗi kết nối một [[inputs.modbus]]: một host:port (TCP) hoặc một cổng serial (RTU). Thiết bị sau cùng
+  - mỗi kết nối một [[inputs.modbus]]: một host:port (TCP), một cổng serial (RTU), hoặc một bus RS-485 sau
+    bộ chuyển serial ↔ Ethernet (cổng socket://host:port -> RTUoverTCP). Thiết bị sau cùng
     gateway / cùng bus dùng chung một kết nối, đúng giới hạn kết nối của gateway thật;
   - mỗi thiết bị và bảng thanh ghi một [[inputs.modbus.request]] (slave_id, byte_order, register, fields);
     Telegraf tự gộp các ô liền nhau trong một request thành ít lệnh đọc nhất.
@@ -16,7 +17,7 @@ Cấu hình chỉ được kiểm cú pháp và đối chiếu Point Map trong b
 """
 import argparse, json, sys
 from pathlib import Path
-from point_map import DEFAULT_PATH, SITE_ENV, load_or_exit
+from point_map import DEFAULT_PATH, SITE_ENV, SOCKET, load_or_exit
 
 MODBUS_TYPES = {"int16": "INT16", "uint16": "UINT16", "int32": "INT32", "uint32": "UINT32", "float32": "FLOAT32"}
 OUT_DIR = Path(__file__).parent
@@ -41,6 +42,8 @@ def _scale(v) -> float:
 
 def _connection(d: dict) -> tuple[str, dict]:
     """(controller, tham số kết nối) của thiết bị Modbus."""
+    if d.get("transport") == "rtu" and d["serial"]["port"].startswith(SOCKET):   # bus sau bộ chuyển serial ↔ Ethernet
+        return f"tcp://{d['serial']['port'].removeprefix(SOCKET)}", {"transmission_mode": "RTUoverTCP"}
     if d.get("transport") == "rtu":
         s = d["serial"]
         return f"file://{s['port']}", {"transmission_mode": "RTU", "baud_rate": s["baudrate"],

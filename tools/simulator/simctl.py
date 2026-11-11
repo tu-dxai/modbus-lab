@@ -47,7 +47,8 @@ def environment_from_state(points: dict, bacnet_port: int = BACNET_CLIENT_PORT) 
 
     make sim (môi trường lab):   10.20.0.21:502 -> 127.0.1.21:5020;  /dev/ttyUSB0 -> var/serial/ttyUSB0 (cổng ảo)
     Docker demo A04 (site):      10.20.0.21:502 -> 10.20.0.21:502 (máy host tới được mạng Docker);
-                                 /dev/ttyUSB0 nằm trong container -> unreachable, KHÔNG mở cổng thật của máy này
+                                 bus mở qua TCP (sim --serial-tcp): /dev/ttyUSB0 -> socket://10.20.0.60:7000;
+                                 bus chỉ có cổng serial trong container -> unreachable, KHÔNG mở cổng thật của máy này
     bacnet_client: IP của máy này trên đường tới thiết bị BACnet, cổng bacnet_port.
     """
     env: dict = {"addresses": {}, "serial": {}, "unreachable": {}}
@@ -56,7 +57,7 @@ def environment_from_state(points: dict, bacnet_port: int = BACNET_CLIENT_PORT) 
         site, ep = p["site_endpoint"], p["endpoint"]
         if ep.startswith("rtu:"):
             src, dst = site.removeprefix("rtu:"), ep.removeprefix("rtu:")
-            if _is_virtual_port(dst):
+            if dst.startswith("socket://") or _is_virtual_port(dst):   # bus qua TCP, hoặc cổng ảo trên máy này
                 env["serial"][src] = dst
             else:
                 env["unreachable"][site] = f"cổng serial {dst} nằm ở máy hoặc container chạy simulator"

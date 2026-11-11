@@ -333,6 +333,15 @@ Client viết bằng ngôn ngữ khác thì gọi thẳng HTTP API (xem đầu f
 `"10.20.0.30:502": "0.0.0.0:5022"`), chạy `make sim ARGS="--env lan --control-host 0.0.0.0"`, và cho client trỏ tới
 `IP-máy:5021`, `IP-máy:5022`.
 
+Bus RS-485 (thiết bị `transport: rtu`) mặc định là cổng serial ảo. Client ở máy hoặc container khác không mở được cổng này. Muốn đọc từ nơi khác thì mở bus qua TCP, như đặt bus sau một bộ chuyển serial ↔ Ethernet:
+`make sim ARGS="--serial-tcp /dev/ttyUSB0=0.0.0.0:7000"`. Cách này:
+- dùng khung RTU có CRC, chạy trên TCP (RTU over TCP);
+- client mở cổng `socket://IP-máy:7000`, pyserial hỗ trợ sẵn URL này;
+- Telegraf đọc bằng `transmission_mode = "RTUoverTCP"`, và `generate.py` tự sinh cấu hình này khi cổng có dạng `socket://`;
+- collector `--env auto` tự nhận ra bus qua TCP.
+
+Demo A04 dùng cách này để bus RS-485 của simulator trong Docker đọc được từ các container Telegraf và từ máy host.
+
 ## Các bài kiểm thử
 
 | Mã | Kiểm tra gì |

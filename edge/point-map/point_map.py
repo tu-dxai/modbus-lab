@@ -83,6 +83,32 @@ def is_rtu(d: dict) -> bool:
     return d.get("transport") == "rtu"
 
 
+SOCKET = "socket://"                                   # cổng serial dạng URL của pyserial: bus nối qua TCP
+
+
+def serial_over_tcp(cfg: dict, mapping: dict) -> list[str]:
+    """Bus RS-485 nối qua bộ chuyển serial ↔ Ethernet (RTU over TCP): {cổng serial thật: "host:port"}.
+
+    Thiết bị trên bus đó mở cổng "socket://host:port" (pyserial mở được như cổng serial; khung vẫn là RTU có CRC);
+    simulator nghe ở host:port, Telegraf đọc bằng transmission_mode RTUoverTCP. Bus không có trong mapping giữ nguyên.
+    """
+    errors, used = [], set()
+    for src, dst in mapping.items():
+        if _parse_address(dst) is None:
+            errors.append(f"bus {src} -> {dst!r} không đúng dạng host:port")
+    for d in cfg.get("devices", []):
+        if not is_rtu(d):
+            continue
+        src = d.get("site_address", f"rtu:{d['serial']['port']}").removeprefix("rtu:")
+        if src in mapping and _parse_address(mapping[src]):
+            used.add(src)
+            d["site_address"] = f"rtu:{src}"
+            d["serial"] = dict(d["serial"], port=f"{SOCKET}{mapping[src]}")
+    errors += [f"bus {src}: không có thiết bị RTU nào dùng cổng này trong Point Map"
+               for src in mapping if src not in used and _parse_address(mapping[src])]
+    return errors
+
+
 # ---------- đọc và áp môi trường ----------
 def _apply_serial(cfg: dict, env: str, mapping: dict) -> list[str]:
     """Ánh xạ cổng serial thật (ví dụ /dev/ttyUSB0) sang cổng của môi trường (ví dụ cổng ảo của simulator)."""

@@ -6,11 +6,13 @@ qua cổng serial đó như qua cổng USB-RS485 thật.
 import copy, tomllib
 import pytest
 from collector import poll_once, LATEST
-from conftest import device
+from conftest import device, lab_config
 from frames import FrameLog, parse_rtu
 from generate import generate
 from modbus_io import Connections, address
-from point_map import read, validate
+from point_map import read, serial_over_tcp, validate
+from sim import start
+from simctl import SimControl
 from write import find, write_guarded
 
 RTU = "dong-ho-rs485-03"
@@ -115,4 +117,56 @@ def test_telegraf_rtu_controller():
     conf = tomllib.loads(generate(read(PATH, env="site")))
     inp = next(i for i in conf["inputs"]["modbus"] if i["controller"] == "file:///dev/ttyUSB0")
     assert inp["transmission_mode"] == "RTU" and inp["baud_rate"] == 9600 and inp["parity"] == "N"
+    assert inp["request"][0]["slave_id"] == 3
+
+
+# ---------- Bus RS-485 qua TCP (bộ chuyển serial ↔ Ethernet, RTU over TCP) ----------
+RS485_TCP = "127.0.0.1:5035"                           # địa chỉ riêng của bài này
+
+
+def test_serial_over_tcp_maps_bus_to_socket_url():
+    cfg = read(PATH, env="site")
+    assert serial_over_tcp(cfg, {"/dev/ttyUSB0": "10.20.0.60:7000"}) == []
+    d = device(cfg, RTU)
+    assert d["serial"]["port"] == "socket://10.20.0.60:7000" and d["site_address"] == "rtu:/dev/ttyUSB0"
+    assert validate(cfg) == []
+
+
+@pytest.mark.parametrize("mapping,word", [({"/dev/ttyUSB9": "10.20.0.60:7000"}, "/dev/ttyUSB9"),
+                                          ({"/dev/ttyUSB0": "khong-co-cong"}, "host:port")])
+def test_serial_over_tcp_rejects_bad_mapping(mapping, word):
+    errors = serial_over_tcp(read(PATH, env="site"), mapping)
+    assert len(errors) == 1 and word in errors[0]
+
+
+@pytest.fixture(scope="module")
+def rtu_over_tcp():
+    """Simulator riêng chỉ có bus RS-485, mở qua TCP như sau một bộ chuyển serial ↔ Ethernet."""
+    cfg = lab_config(5034)
+    cfg["devices"], cfg["alerts"] = [device(cfg, RTU)], []
+    assert serial_over_tcp(cfg, {"/dev/ttyUSB0": RS485_TCP}) == []
+    sim = start(cfg, control_port=0)
+    return cfg, sim
+
+
+def test_read_rtu_device_through_tcp_bus(rtu_over_tcp):
+    cfg, sim = rtu_over_tcp
+    SimControl(sim.control_url).set(f"{RTU}.dien_ap", 228.4)
+    c = Connections()
+    try:
+        assert c.read(device(cfg, RTU), next(p for p in device(cfg, RTU)["points"] if p["name"] == "dien_ap")) == 228.4
+    finally:
+        c.close()
+
+
+def test_environment_from_simulator_reaches_tcp_bus(rtu_over_tcp):
+    env = SimControl(rtu_over_tcp[1].control_url).environment()
+    assert env["serial"] == {"/dev/ttyUSB0": f"socket://{RS485_TCP}"} and env["unreachable"] == {}
+
+
+def test_telegraf_reads_tcp_bus_as_rtu_over_tcp():
+    cfg = read(PATH, env="site")
+    serial_over_tcp(cfg, {"/dev/ttyUSB0": "10.20.0.60:7000"})
+    inp = next(i for i in tomllib.loads(generate(cfg))["inputs"]["modbus"] if i["controller"] == "tcp://10.20.0.60:7000")
+    assert inp["transmission_mode"] == "RTUoverTCP" and "baud_rate" not in inp
     assert inp["request"][0]["slave_id"] == 3

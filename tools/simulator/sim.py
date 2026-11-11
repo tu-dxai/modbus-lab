@@ -34,7 +34,7 @@ from pymodbus.pdu import ExceptionResponse
 from pymodbus.server import ModbusTcpServer, StartAsyncSerialServer
 from pymodbus.simulator import DataType, SimData, SimDevice
 from codec import SIZE
-from point_map import DEFAULT_PATH, device_meta, load_or_exit, point_ref
+from point_map import DEFAULT_PATH, SOCKET, device_meta, load_or_exit, point_ref, serial_over_tcp
 from sim_state import SimState, endpoint
 from vserial import VirtualSerial
 
@@ -151,6 +151,11 @@ def start(cfg, control_port=None, control_host="127.0.0.1", frames=500, auto=0) 
         devices = [build_device(d, state) for d in devs]
         rtu, gateway = devs[0].get("transport") == "rtu", len(devs) > 1
         guard = power_guard(state, devs, silent=not gateway, witness=state.tracer(ep, site_ep))
+        if rtu and devs[0]["serial"]["port"].startswith(SOCKET):   # bus RS-485 sau bộ chuyển serial ↔ Ethernet
+            host, port = devs[0]["serial"]["port"].removeprefix(SOCKET).rsplit(":", 1)
+            _TcpEndpoint(devices, (host, int(port)), framer=FramerType.RTU,     # RTU over TCP: khung RTU có CRC
+                         trace_packet=state.frames.tracer(ep, site_ep, rtu=True), trace_pdu=guard)
+            continue
         if rtu:                                          # bus RS-485: cổng serial ảo, client mở đầu kia
             s = devs[0]["serial"]
             line = VirtualSerial(s["port"])
@@ -212,10 +217,18 @@ if __name__ == "__main__":
     ap.add_argument("--control-host", default="127.0.0.1", help="0.0.0.0 để điều khiển từ máy khác")
     ap.add_argument("--control-port", type=int, default=5080)
     ap.add_argument("--frames", type=int, default=500, help="số cặp khung tin gần nhất giữ lại để xem")
+    ap.add_argument("--serial-tcp", action="append", default=[], metavar="CỔNG=HOST:PORT",
+                    help="mở bus RS-485 qua TCP (RTU over TCP) như sau bộ chuyển serial ↔ Ethernet, "
+                         "ví dụ /dev/ttyUSB0=10.20.0.60:7000; client ở máy/container khác đọc được bus")
     args = ap.parse_args()
     cfg = load_or_exit(args.config, args.env)
     if not 0 <= args.auto <= SimState.AUTO_MAX:
         ap.error(f"--auto phải từ 0 đến {SimState.AUTO_MAX}")
+    bad = [m for m in args.serial_tcp if "=" not in m]
+    errors = [f"--serial-tcp {m!r}: cần dạng CỔNG=HOST:PORT" for m in bad] or \
+        serial_over_tcp(cfg, dict(m.split("=", 1) for m in args.serial_tcp))
+    if errors:
+        ap.error("; ".join(errors))
     sim = start(cfg, args.control_port, args.control_host, args.frames, args.auto)
     print(f"Simulator site {cfg.get('site', '?')}, môi trường {args.env}, "
           f"{f'tự thay đổi mỗi {args.auto} giây' if args.auto else 'giá trị chỉ đổi khi đặt bằng tay'}")
