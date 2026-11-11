@@ -31,7 +31,7 @@ from audit import DEFAULT_PATH as AUDIT_PATH, AuditLog
 from frames import FrameLog, function_filter
 from i18n import SCRIPT, ApiError, Translatable, by_language, t
 from modbus_io import Connections, address
-from point_map import DEFAULT_PATH, device_meta, load_or_exit, point_ref
+from point_map import DEFAULT_PATH, PointMapError, device_meta, load, load_or_exit, point_ref
 from simctl import BACNET_CLIENT_PORT, SimControl, SimError
 
 warnings.filterwarnings("ignore")
@@ -51,6 +51,7 @@ def poll_once(conns, cfg, device: str | None = None, point: str | None = None) -
     rows, down = {}, set()                         # down: địa chỉ không kết nối được trong lượt này
     t0 = time.perf_counter()
     with CLIENT_LOCK:
+        refresh_environment(cfg, conns)
         for d in cfg["devices"]:
             if device is not None and d["name"] != device:
                 continue
@@ -85,6 +86,37 @@ def poll_once(conns, cfg, device: str | None = None, point: str | None = None) -
         STATUS.update(round=STATUS["round"] + 1, at=time.strftime("%H:%M:%S"), **result)
         check_alerts(cfg)
     return result
+
+
+def refresh_environment(cfg: dict, conns) -> bool:
+    """--env auto: hỏi lại simulator trước mỗi lượt đọc. Thiết bị đổi chỗ nghe (simulator chạy sau collector,
+    hay khởi động lại ở chỗ khác: make sim <-> Docker demo A04) thì nạp lại Point Map ngay trong cfg, xóa số liệu
+    cũ và mở lại kết nối. Simulator không trả lời thì giữ nguyên. Gọi khi đang giữ CLIENT_LOCK."""
+    auto = cfg.get("auto")
+    if not auto:
+        return False
+    try:
+        env_cfg = SimControl(auto["sim_url"], timeout=1).environment(auto["bacnet_port"])
+    except SimError:
+        return False
+    if env_cfg == auto["env_cfg"]:
+        return False
+    try:
+        new = load(auto["path"], "sim", env_cfg)
+    except PointMapError as e:
+        print(f"Simulator tại {auto['sim_url']} không khớp Point Map: {'; '.join(e.errors)}")
+        return False
+    conns.close()
+    with DATA_LOCK:
+        cfg.clear()
+        cfg.update(new, auto=dict(auto, env_cfg=env_cfg))
+        LATEST.clear(), HISTORY.clear(), ALERTS.clear()
+        if Web.frames is not None:                 # khung tin: tra thiết bị theo địa chỉ mới
+            Web.frames.devices = {(address(d), d.get("device_id")): d for d in cfg["devices"]}
+    print(f"Thiết bị theo simulator tại {auto['sim_url']} (vừa cập nhật địa chỉ)")
+    for name, why in cfg.get("unreachable", {}).items():
+        print(f"  bỏ qua {name}: {why}")
+    return True
 
 
 def _error_row(code: str, **params) -> dict:
@@ -294,20 +326,22 @@ def serve(cfg, conns, host="127.0.0.1", port=8080, frames=500, audit=None):
 
 def load_config(path: str, env: str, sim_url: str | None = None, bacnet_port: int = BACNET_CLIENT_PORT) -> dict:
     """Point Map theo môi trường. env "auto": hỏi simulator đang chạy thiết bị nằm ở đâu (make sim hay Docker
-    demo A04 đều được); không kết nối được simulator thì dùng môi trường lab như trước."""
+    demo A04 đều được); không kết nối được simulator thì tạm dùng môi trường lab. cfg["auto"] giữ thông tin để
+    mỗi lượt đọc hỏi lại simulator (refresh_environment), nên simulator chạy sau collector vẫn đọc được."""
     if env != "auto":
         return load_or_exit(path, env)
     ctl = SimControl(sim_url)
+    auto = {"path": path, "sim_url": ctl.url, "bacnet_port": bacnet_port, "env_cfg": None}
     try:
-        env_cfg = ctl.environment(bacnet_port)
+        auto["env_cfg"] = ctl.environment(bacnet_port)
     except SimError as e:
-        print(f"{e}; dùng môi trường lab (environments/lab.yml)")
-        return load_or_exit(path, "lab")
-    cfg = load_or_exit(path, "sim", env_cfg)
+        print(f"{e}; tạm dùng môi trường lab, sẽ hỏi lại simulator ở mỗi lượt đọc")
+        return dict(load_or_exit(path, "lab"), auto=auto)
+    cfg = load_or_exit(path, "sim", auto["env_cfg"])
     print(f"Thiết bị theo simulator tại {ctl.url}")
     for name, why in cfg.get("unreachable", {}).items():
         print(f"  bỏ qua {name}: {why}")
-    return cfg
+    return dict(cfg, auto=auto)
 
 
 if __name__ == "__main__":

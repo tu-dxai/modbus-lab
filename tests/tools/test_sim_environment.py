@@ -72,3 +72,22 @@ def test_point_map_drops_unreachable_devices_with_reason():
 def test_auto_uses_running_simulator_then_falls_back_to_lab(_sim):
     assert load_config(PATH, "auto", sim_url=_sim[1].control_url, bacnet_port=BACNET_PORT)["env"] == "sim"
     assert load_config(PATH, "auto", sim_url="http://127.0.0.1:9", bacnet_port=BACNET_PORT)["env"] == "lab"
+
+
+def test_auto_picks_up_simulator_started_after_collector(_sim):
+    """Collector chạy trước, simulator chạy sau (hoặc khởi động lại ở chỗ khác): lượt đọc kế tiếp theo kịp."""
+    cfg = load_config(PATH, "auto", sim_url="http://127.0.0.1:9", bacnet_port=BACNET_PORT)
+    assert cfg["env"] == "lab"
+    cfg["auto"]["sim_url"] = _sim[1].control_url       # simulator giờ đã trả lời ở đây
+    c = Connections()
+    try:
+        r = poll_once(c, cfg)
+    finally:
+        c.close()
+    assert cfg["env"] == "sim"
+    assert r["read"] > 0 and r["ok_count"] == r["read"]
+
+
+def test_lab_config_never_switches_environment(cfg):
+    """Chỉ cấu hình nạp bằng --env auto mới hỏi lại simulator; lab / site giữ nguyên địa chỉ."""
+    assert "auto" not in cfg

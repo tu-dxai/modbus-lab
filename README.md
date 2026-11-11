@@ -138,7 +138,8 @@ Collector **tự tìm thiết bị qua simulator đang chạy**:
 - Collector hỏi trang điều khiển của simulator (mặc định `http://127.0.0.1:5080`, đổi bằng `SIM_URL`) xem từng thiết bị đang nghe ở đâu.
 - Vì vậy đọc được cả simulator chạy bằng `make sim` (127.0.1.x) lẫn simulator trong Docker của demo A04 (đúng IP site 10.20.0.x).
 - Với simulator trong Docker, thiết bị RS-485 bị bỏ qua và có ghi lý do: cổng serial nằm trong container. Collector không mở cổng serial thật của máy này.
-- Không kết nối được simulator thì collector dùng `environments/lab.yml` như trước.
+- Không kết nối được simulator thì collector tạm dùng `environments/lab.yml`.
+- Mỗi lượt đọc, collector hỏi lại simulator. Simulator chạy sau collector, hay khởi động lại ở chỗ khác (`make sim` ↔ Docker), thì collector tự theo kịp, không cần khởi động lại.
 - Muốn cố định môi trường: `ARGS="--env lab"` hoặc `ARGS="--env site"` (thiết bị thật).
 
 Mặc định collector **không tự đọc**: bấm **Đọc tất cả / Đọc thiết bị này** (hoặc phím **R**), hay nút **Đọc** trên
