@@ -134,6 +134,13 @@ make collect                        # đọc khi bấm nút — mỗi lần bấ
 make collect ARGS="--interval 2"    # tự đọc mỗi 2 giây, giống edge chạy thật
 ```
 
+Collector **tự tìm thiết bị qua simulator đang chạy**:
+- Collector hỏi trang điều khiển của simulator (mặc định `http://127.0.0.1:5080`, đổi bằng `SIM_URL`) xem từng thiết bị đang nghe ở đâu.
+- Vì vậy đọc được cả simulator chạy bằng `make sim` (127.0.1.x) lẫn simulator trong Docker của demo A04 (đúng IP site 10.20.0.x).
+- Với simulator trong Docker, thiết bị RS-485 bị bỏ qua và có ghi lý do: cổng serial nằm trong container. Collector không mở cổng serial thật của máy này.
+- Không kết nối được simulator thì collector dùng `environments/lab.yml` như trước.
+- Muốn cố định môi trường: `ARGS="--env lab"` hoặc `ARGS="--env site"` (thiết bị thật).
+
 Mặc định collector **không tự đọc**: bấm **Đọc tất cả / Đọc thiết bị này** (hoặc phím **R**), hay nút **Đọc** trên
 từng dòng để gửi yêu cầu riêng một điểm. Nhờ vậy khung tin và lệnh ghi bên simulator khớp đúng từng thao tác khi
 kiểm thử. Sau mỗi lượt, trang hiện số điểm đọc được và thời gian (ms); ghi xong thì tự đọc lại thiết bị đó.
@@ -364,7 +371,8 @@ Simulator, collector và công cụ ghi kiểm tra Point Map khi khởi động;
 - Đổi IP gateway thì phải sửa ở mọi thiết bị phía sau; sửa sót một thiết bị thì nó bị coi là thiết bị riêng.
 
 **Môi trường.** Mặc định mọi công cụ chạy `--env lab`: mỗi địa chỉ thật được ánh xạ sang simulator theo
-`environments/lab.yml` (mỗi gateway một dòng). Chỉ `--env site` mới kết nối địa chỉ thật — ví dụ
+`environments/lab.yml` (mỗi gateway một dòng). Riêng collector (`make collect`, `make once`) mặc định
+`--env auto`: lấy ánh xạ từ simulator đang chạy (xem mục bật collector). Chỉ `--env site` mới kết nối địa chỉ thật — ví dụ
 `make once ARGS="--env site"`, `make write P=... V=... ARGS="--env site"`. File môi trường phải có đủ mọi địa chỉ,
 không thừa, không hai địa chỉ trỏ chung một chỗ.
 

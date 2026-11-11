@@ -23,6 +23,7 @@ help:
 	@echo ""
 	@echo "Đọc và ghi (mặc định môi trường lab; ARGS=\"--env site\" để dùng thiết bị thật)"
 	@echo "  make collect       chạy collector, trang http://localhost:8080; đọc khi bấm nút (phím R)"
+	@echo "                     tự tìm thiết bị qua simulator ở SIM_URL (mặc định :5080): make sim hay Docker demo A04"
 	@echo "                     ARGS=\"--interval 2\" để tự đọc mỗi 2 giây như edge chạy thật"
 	@echo "  make once          đọc một lượt rồi thoát"
 	@echo "  make write P=bess-01.che_do V=1   ghi qua rào chắn, đọc lại xác nhận"

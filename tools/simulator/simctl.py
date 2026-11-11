@@ -17,14 +17,61 @@ Dòng lệnh (make set / make writes / make reset gọi vào đây):
     simctl.py auto [giây]     xem / đặt chế độ tự thay đổi giá trị (0 = chỉ đặt bằng tay)
     simctl.py reset
 """
-import argparse, json, os, sys, time, urllib.error, urllib.request
+import argparse, json, os, socket, sys, time, urllib.error, urllib.request
+from pathlib import Path
 from urllib.parse import urlencode
 
 DEFAULT_URL = "http://127.0.0.1:5080"
+BACNET_CLIENT_PORT = 47809    # cổng client BACnet của máy này: khác cổng thiết bị (47808), như environments/lab.yml
 
 
 class SimError(Exception):
     """Simulator từ chối yêu cầu (điểm không có, giá trị không vừa...) hoặc không kết nối được."""
+
+
+def _is_virtual_port(path: str) -> bool:
+    """Cổng serial ảo simulator tạo trên CHÍNH máy này (vserial.py): symlink trỏ tới một pseudo-terminal."""
+    p = Path(path)
+    return p.is_symlink() and os.path.realpath(p).startswith(("/dev/pts/", "/dev/ttys"))
+
+
+def _local_ip(host: str) -> str:
+    """IP của máy này trên đường tới host (không gửi gói nào: UDP connect chỉ chọn tuyến)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.connect((host, 47808))
+        return s.getsockname()[0]
+
+
+def environment_from_state(points: dict, bacnet_port: int = BACNET_CLIENT_PORT) -> dict:
+    """Từ /api/state của simulator: địa chỉ thật trong Point Map -> nơi simulator đang nghe.
+
+    make sim (môi trường lab):   10.20.0.21:502 -> 127.0.1.21:5020;  /dev/ttyUSB0 -> var/serial/ttyUSB0 (cổng ảo)
+    Docker demo A04 (site):      10.20.0.21:502 -> 10.20.0.21:502 (máy host tới được mạng Docker);
+                                 /dev/ttyUSB0 nằm trong container -> unreachable, KHÔNG mở cổng thật của máy này
+    bacnet_client: IP của máy này trên đường tới thiết bị BACnet, cổng bacnet_port.
+    """
+    env: dict = {"addresses": {}, "serial": {}, "unreachable": {}}
+    bacnet: dict[str, str] = {}                        # địa chỉ thật -> nơi simulator nghe, của thiết bị BACnet
+    for p in points.values():
+        site, ep = p["site_endpoint"], p["endpoint"]
+        if ep.startswith("rtu:"):
+            src, dst = site.removeprefix("rtu:"), ep.removeprefix("rtu:")
+            if _is_virtual_port(dst):
+                env["serial"][src] = dst
+            else:
+                env["unreachable"][site] = f"cổng serial {dst} nằm ở máy hoặc container chạy simulator"
+            continue
+        env["addresses"][site] = ep
+        if p.get("protocol") == "bacnet":
+            bacnet[site] = ep
+    if bacnet:
+        try:
+            env["bacnet_client"] = f"{_local_ip(min(bacnet.values()).rsplit(':', 1)[0])}/32:{bacnet_port}"
+        except OSError as e:                               # máy này không có tuyến tới thiết bị BACnet
+            for site, ep in bacnet.items():
+                env["addresses"].pop(site)
+                env["unreachable"][site] = f"không có đường mạng tới {ep} ({e.strerror})"
+    return env
 
 
 class SimControl:
@@ -57,6 +104,10 @@ class SimControl:
         if key not in points:
             raise SimError(f"không có điểm '{key}' trong Point Map")
         return points[key]
+
+    def environment(self, bacnet_port: int = BACNET_CLIENT_PORT) -> dict:
+        """Môi trường theo simulator đang chạy, cùng dạng environments/<env>.yml (xem environment_from_state)."""
+        return environment_from_state(self.get(), bacnet_port)
 
     def set(self, key: str, value: float) -> float:
         """Đặt một điểm; trả về giá trị thiết bị sẽ báo (đã làm tròn theo kiểu và hệ số)."""

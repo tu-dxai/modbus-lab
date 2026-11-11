@@ -18,7 +18,9 @@ API cho trang web (collector.html):
 
 Mỗi địa chỉ host:port một kết nối; thiết bị sau cùng gateway dùng chung. Một địa chỉ không kết nối
 được thì chỉ các thiết bị ở địa chỉ đó báo lỗi, và lượt đó không thử lại nó cho từng điểm.
-Mặc định --env lab (simulator); --env site để đọc thiết bị thật.
+Mặc định --env auto: hỏi simulator đang chạy (SIM_URL, mặc định http://127.0.0.1:5080) thiết bị nằm ở đâu,
+nên đọc được cả simulator chạy bằng make sim lẫn simulator trong Docker của demo A04; không thấy simulator
+thì dùng môi trường lab. --env lab: theo environments/lab.yml; --env site: thiết bị thật.
 """
 import argparse, json, logging, threading, time, warnings
 from collections import deque
@@ -30,6 +32,7 @@ from frames import FrameLog, function_filter
 from i18n import SCRIPT, ApiError, Translatable, by_language, t
 from modbus_io import Connections, address
 from point_map import DEFAULT_PATH, device_meta, load_or_exit, point_ref
+from simctl import BACNET_CLIENT_PORT, SimControl, SimError
 
 warnings.filterwarnings("ignore")
 logging.getLogger("pymodbus").setLevel(logging.CRITICAL)
@@ -289,10 +292,30 @@ def serve(cfg, conns, host="127.0.0.1", port=8080, frames=500, audit=None):
     return srv
 
 
+def load_config(path: str, env: str, sim_url: str | None = None, bacnet_port: int = BACNET_CLIENT_PORT) -> dict:
+    """Point Map theo môi trường. env "auto": hỏi simulator đang chạy thiết bị nằm ở đâu (make sim hay Docker
+    demo A04 đều được); không kết nối được simulator thì dùng môi trường lab như trước."""
+    if env != "auto":
+        return load_or_exit(path, env)
+    ctl = SimControl(sim_url)
+    try:
+        env_cfg = ctl.environment(bacnet_port)
+    except SimError as e:
+        print(f"{e}; dùng môi trường lab (environments/lab.yml)")
+        return load_or_exit(path, "lab")
+    cfg = load_or_exit(path, "sim", env_cfg)
+    print(f"Thiết bị theo simulator tại {ctl.url}")
+    for name, why in cfg.get("unreachable", {}).items():
+        print(f"  bỏ qua {name}: {why}")
+    return cfg
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=DEFAULT_PATH)
-    ap.add_argument("--env", default="lab", help="lab = simulator (mặc định); site = thiết bị thật")
+    ap.add_argument("--env", default="auto",
+                    help="auto = theo simulator đang chạy ở SIM_URL (mặc định); lab = environments/lab.yml; "
+                         "site = thiết bị thật")
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--interval", type=int, default=0,
                     help="tự đọc mỗi N giây (1-3600); mặc định 0 = chỉ đọc khi bấm nút trên trang")
@@ -303,7 +326,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
     if not 0 <= args.interval <= AUTO_MAX:
         ap.error(f"--interval phải từ 0 đến {AUTO_MAX}")
-    cfg = load_or_exit(args.config, args.env)
+    cfg = load_config(args.config, args.env)
     c = Connections()
     if args.once:
         poll_once(c, cfg)

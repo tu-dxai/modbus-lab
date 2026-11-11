@@ -8,6 +8,8 @@ Môi trường:
   - env "site": dùng nguyên địa chỉ thật — chỉ khi cố ý kết nối thiết bị thật.
   - env khác (mặc định "lab"): đọc environments/<env>.yml cạnh Point Map, ánh xạ từng địa chỉ
     thật "host:port" sang địa chỉ khác (simulator). Mỗi địa chỉ thật phải có đúng một dòng.
+  - môi trường cũng có thể truyền sẵn dạng dict (env_cfg), ví dụ dựng từ simulator đang chạy;
+    mục `unreachable` {địa chỉ thật: lý do} bỏ thiết bị máy này không tới được, lý do ở cfg["unreachable"].
 
 Kiểm tra:
   - thiết bị có host, port (1-65535), device_id (số nguyên); timeout nếu có thì > 0
@@ -103,10 +105,28 @@ def _apply_serial(cfg: dict, env: str, mapping: dict) -> list[str]:
     return errors
 
 
-def _apply_environment(cfg: dict, env: str, env_file: Path) -> list[str]:
-    if not env_file.exists():
-        return [f"không có file môi trường '{env}' ({env_file}); dùng --env {SITE_ENV} để kết nối địa chỉ thật"]
-    env_cfg = yaml.safe_load(env_file.read_text(encoding="utf-8")) or {}
+def _site_key(d: dict) -> str:
+    """Địa chỉ thật của thiết bị trong Point Map, cùng dạng khóa của môi trường: host:port hoặc rtu:<cổng>."""
+    if is_rtu(d) and isinstance(d.get("serial"), dict):
+        return f"rtu:{d['serial'].get('port')}"
+    return f"{d.get('host')}:{d.get('port')}"
+
+
+def _drop_unreachable(cfg: dict, unreachable: dict) -> None:
+    """Bỏ thiết bị môi trường báo máy này không tới được (kèm cảnh báo của nó); lý do ghi vào cfg["unreachable"]."""
+    keep, dropped = [], {}
+    for d in cfg.get("devices", []):
+        if _site_key(d) in unreachable:
+            dropped[d.get("name", "?")] = unreachable[_site_key(d)]
+        else:
+            keep.append(d)
+    cfg["devices"] = keep
+    cfg["alerts"] = [a for a in cfg.get("alerts", []) if str(a.get("point", "")).split(".")[0] not in dropped]
+    cfg["unreachable"] = dropped
+
+
+def _apply_environment(cfg: dict, env: str, env_cfg: dict) -> list[str]:
+    _drop_unreachable(cfg, env_cfg.get("unreachable") or {})
     mapping = env_cfg.get("addresses") or {}
     errors, targets = _apply_serial(cfg, env, env_cfg.get("serial") or {}), {}
     for src, dst in mapping.items():
@@ -133,16 +153,25 @@ def _apply_environment(cfg: dict, env: str, env_file: Path) -> list[str]:
     return errors
 
 
-def read(path: str = DEFAULT_PATH, env: str = DEFAULT_ENV) -> dict:
-    """Đọc Point Map và áp môi trường, chưa kiểm tra nội dung. Lỗi môi trường -> PointMapError."""
+def read(path: str = DEFAULT_PATH, env: str = DEFAULT_ENV, env_cfg: dict | None = None) -> dict:
+    """Đọc Point Map và áp môi trường, chưa kiểm tra nội dung. Lỗi môi trường -> PointMapError.
+
+    env_cfg: môi trường cho sẵn (cùng dạng environments/<env>.yml, thêm mục unreachable), ví dụ dựng từ
+    simulator đang chạy (simctl.SimControl.environment); None = đọc file environments/<env>.yml.
+    """
     with open(path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f) or {}
     if env != SITE_ENV:
-        env_file = Path(path).parent / "environments" / f"{env}.yml"
-        errors = _apply_environment(cfg, env, env_file)
+        if env_cfg is None:
+            env_file = Path(path).parent / "environments" / f"{env}.yml"
+            if not env_file.exists():
+                raise PointMapError([f"không có file môi trường '{env}' ({env_file}); "
+                                     f"dùng --env {SITE_ENV} để kết nối địa chỉ thật"])
+            env_cfg = yaml.safe_load(env_file.read_text(encoding="utf-8")) or {}
+        errors = _apply_environment(cfg, env, env_cfg)
         if errors:
             raise PointMapError(errors)
-        client = (yaml.safe_load(env_file.read_text(encoding="utf-8")) or {}).get("bacnet_client")
+        client = env_cfg.get("bacnet_client")
         if client:
             cfg["bacnet"] = dict(cfg.get("bacnet") or {}, client=client)
     for d in cfg.get("devices", []):                   # client BACnet dùng khi đọc/ghi thiết bị này
@@ -152,19 +181,19 @@ def read(path: str = DEFAULT_PATH, env: str = DEFAULT_ENV) -> dict:
     return cfg
 
 
-def load(path: str = DEFAULT_PATH, env: str = DEFAULT_ENV) -> dict:
+def load(path: str = DEFAULT_PATH, env: str = DEFAULT_ENV, env_cfg: dict | None = None) -> dict:
     """Đọc, áp môi trường và kiểm tra; có lỗi thì PointMapError với mọi lỗi."""
-    cfg = read(path, env)
+    cfg = read(path, env, env_cfg)
     errors = validate(cfg)
     if errors:
         raise PointMapError(errors)
     return cfg
 
 
-def load_or_exit(path: str = DEFAULT_PATH, env: str = DEFAULT_ENV) -> dict:
+def load_or_exit(path: str = DEFAULT_PATH, env: str = DEFAULT_ENV, env_cfg: dict | None = None) -> dict:
     """Gọi khi khởi động chương trình: Point Map hỏng thì in mọi lỗi rồi dừng."""
     try:
-        return load(path, env)
+        return load(path, env, env_cfg)
     except PointMapError as e:
         print(f"Point Map {path} (môi trường {env}) có {len(e.errors)} lỗi:", file=sys.stderr)
         for err in e.errors:
