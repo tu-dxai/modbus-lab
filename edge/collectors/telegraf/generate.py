@@ -116,7 +116,9 @@ def _snmp(cfg: dict, lines: list[str]) -> None:
                 lines.append(f"    conversion = {q(f'float({digits})')}")
 
 
-def generate(cfg: dict) -> str:
+def generate(cfg: dict, inputs_only: bool = False) -> str:
+    """inputs_only: chỉ sinh các inputs, để ghép (telegraf --config ... --config <file này>) vào cấu hình
+    edge đã có [agent] và output riêng (MQTT) — tránh [agent] ở đây ghi đè interval / hostname của edge."""
     skipped = [d["name"] for d in cfg["devices"] if d.get("protocol", "modbus") not in ("modbus", "snmp")]
     lines = ["# =============================================================",
              "#  CẤU HÌNH TELEGRAF — SINH TỰ ĐỘNG TỪ POINT MAP, ĐỪNG SỬA TAY",
@@ -124,12 +126,14 @@ def generate(cfg: dict) -> str:
              "#  Sinh lại: make telegraf (edge/collectors/telegraf/generate.py)",
              "#  Chưa chạy thử với Telegraf thật — kiểm bằng: telegraf --config <file> --test",
              f"#  Bỏ qua (collector Python đọc BACnet): {', '.join(skipped) or 'không có'}",
-             "# =============================================================",
-             "", "[agent]", '  interval = "5s"', "  omit_hostname = true"]
+             "# ============================================================="]
+    if not inputs_only:
+        lines += ["", "[agent]", '  interval = "5s"', "  omit_hostname = true"]
     _modbus(cfg, lines)
     _snmp(cfg, lines)
-    lines += ["", "[[outputs.file]]", '  files = ["stdout"]', ""]
-    return "\n".join(lines)
+    if not inputs_only:
+        lines += ["", "[[outputs.file]]", '  files = ["stdout"]']
+    return "\n".join(lines + [""])
 
 
 def main(argv: list[str]) -> int:

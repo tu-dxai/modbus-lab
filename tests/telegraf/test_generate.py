@@ -67,6 +67,14 @@ def test_every_point_appears_exactly_once():
     assert sorted(names) == sorted(expected)
 
 
+def test_inputs_only_leaves_agent_and_outputs_to_the_edge():
+    """Edge thật có [agent] và output MQTT riêng; file thiết bị ghép vào chỉ được chứa inputs."""
+    cfg = read(PATH, env="site")
+    c = tomllib.loads(generate(cfg, inputs_only=True))
+    assert set(c) == {"inputs"}
+    assert c["inputs"] == conf(cfg=cfg)["inputs"]
+
+
 def test_unsupported_scale_type_is_an_error():
     cfg = read(PATH, env="site")
     cfg["devices"][0]["points"][0]["type"] = "bitfield"
