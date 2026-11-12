@@ -125,7 +125,11 @@ def test_collector_skips_rest_of_silent_device(cfg, sim_ctl):
     ups["timeout"] = 0.5
     sim_ctl.power("ups-01", False)
     t0 = time.perf_counter()
-    r = poll_once(Connections(), c, device="ups-01")
+    conns = Connections()
+    try:
+        r = poll_once(conns, c, device="ups-01")
+    finally:
+        conns.close()
     assert time.perf_counter() - t0 < 2.5                      # 7 điểm nhưng chỉ chờ timeout một lần
     rows = [LATEST[f"ups-01.{p['name']}"] for p in ups["points"]]
     assert r["ok_count"] == 0 and rows[0]["code"] == "read.snmp_no_answer"
@@ -147,7 +151,11 @@ def test_cli_power(sim_ctl):
 def test_collector_round_survives_exception_0b(cfg, sim_ctl):
     """Mã lỗi Modbus (ở đây 0B từ gateway) chỉ làm lỗi đúng điểm đó; lượt đọc vẫn xong, thiết bị khác vẫn đọc được."""
     sim_ctl.power("dong-ho-dien-02", False)
-    r = poll_once(Connections(), cfg, device=None)
+    c = Connections()
+    try:
+        r = poll_once(c, cfg, device=None)
+    finally:
+        c.close()                                    # nhả cổng serial: một bus RS-485 chỉ có một master
     row = LATEST["dong-ho-dien-02.dien_ap"]
     assert row["code"] == "read.modbus_exception" and row["params"] == {"code": 11}
     assert LATEST["dong-ho-dien-01.dien_ap"]["ok"] and r["ok_count"] == r["read"] - 4

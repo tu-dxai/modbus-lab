@@ -72,7 +72,11 @@ def test_mb07_connection_lost(cfg):
         d.update(port=5999, timeout=0.5)       # không còn thiết bị nào trả lời
         if d.get("transport") == "rtu":
             d["serial"] = dict(d["serial"], port="var/serial/khong-co-cong-nay")
-    poll_once(Connections(), wrong)
+    c = Connections()
+    try:
+        poll_once(c, wrong)
+    finally:
+        c.close()
     assert LATEST and all(not r["ok"] for r in LATEST.values())
 
 

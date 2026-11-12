@@ -84,7 +84,11 @@ def test_value_set_on_simulator_is_read_over_bacnet(cfg, conns, sim_ctl):
 
 
 def test_poll_reads_whole_crah(cfg):
-    poll_once(Connections(), cfg, device=CRAH)
+    c = Connections()
+    try:
+        poll_once(c, cfg, device=CRAH)
+    finally:
+        c.close()
     crah = {k: r for k, r in LATEST.items() if k.startswith(CRAH + ".")}
     assert len(crah) == len(device(cfg, CRAH)["points"]) and all(r["ok"] for r in crah.values())
 

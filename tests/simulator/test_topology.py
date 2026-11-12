@@ -45,7 +45,11 @@ def test_one_address_down_does_not_affect_others(cfg):
     for d in broken["devices"]:
         if d["name"].startswith("dong-ho-dien"):
             d.update(port=5999, timeout=0.5)   # gateway điện mất kết nối
-    poll_once(Connections(), broken)
+    c = Connections()
+    try:
+        poll_once(c, broken)
+    finally:
+        c.close()                                # nhả cổng serial của bus RS-485
     assert all(not r["ok"] and "127.0.1.21:5999" in r["error"] and r["code"] == "read.unreachable"
                for k, r in LATEST.items() if k.startswith("dong-ho-dien"))
     assert all(r["ok"] for k, r in LATEST.items() if k.startswith("bess-01"))
