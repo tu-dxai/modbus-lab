@@ -292,7 +292,7 @@ function renderHelp(page) {
   }
   // Hệ thống trong data center: cho người mới, trước khi đọc sơ đồ hay thuật ngữ giao thức.
   const systems = el('dl', 'terms');
-  for (const k of ['epms', 'bms', 'dcim', 'itsm', 'edge', 'ups', 'bess', 'crah', 'pdu', 'single_line']) {
+  for (const k of ['epms', 'bms', 'dcim', 'itsm', 'edge', 'telegraf', 'ups', 'bess', 'crah', 'pdu', 'single_line']) {
     systems.append(el('dt', '', t(`help.sys_term_${k}`)), el('dd', '', t(`help.sys_def_${k}`)));
   }
   const sys = section('help.systems', el('p', 'muted', t('help.systems_intro')), systems);

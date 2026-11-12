@@ -15,6 +15,14 @@ API cho trang web (collector.html):
   POST /api/relinquish  BACnet: nhả lệnh {"point": "crah-01.diem_dat_nhiet"} ở priority của điểm
   GET  /api/frames    khung tin collector gửi đi và nhận về; lọc ?device=&function=&errors=1&since=&limit=
   DELETE /api/frames  xóa khung tin
+  POST /api/source    {"source": "telegraf", "interval": 2} Telegraf thật đọc Modbus / SNMP; {"source": "python"}
+  POST /api/telegraf  Telegraf gửi số liệu về đây (outputs.http, JSON)
+
+Hai nguồn số liệu (chọn trên trang hoặc --source):
+  python    collector tự đọc bằng pymodbus / pysnmp / bacpypes3: đọc khi bấm, xem được khung tin thô — để debug
+  telegraf  Telegraf thật (Docker telegraf:1.32, như edge thật và demo A04) đọc định kỳ Modbus TCP, RTU qua TCP, SNMP
+            theo cấu hình sinh từ Point Map; Python vẫn đọc BACnet và bus RS-485 ở cổng serial ảo trên máy.
+            Điểm Telegraf không gửi về quá 3 chu kỳ thì báo lỗi "cũ" (thiết bị không trả lời, tắt...).
 
 Mỗi địa chỉ host:port một kết nối; thiết bị sau cùng gateway dùng chung. Một địa chỉ không kết nối
 được thì chỉ các thiết bị ở địa chỉ đó báo lỗi, và lượt đó không thử lại nó cho từng điểm.
@@ -22,7 +30,7 @@ Mặc định --env auto: hỏi simulator đang chạy (SIM_URL, mặc định h
 nên đọc được cả simulator chạy bằng make sim lẫn simulator trong Docker của demo A04; không thấy simulator
 thì dùng môi trường lab. --env lab: theo environments/lab.yml; --env site: thiết bị thật.
 """
-import argparse, json, logging, threading, time, warnings
+import argparse, atexit, json, logging, signal, threading, time, warnings
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -33,12 +41,17 @@ from i18n import SCRIPT, ApiError, Translatable, by_language, t
 from modbus_io import Connections, address
 from point_map import DEFAULT_PATH, PointMapError, device_meta, load, load_or_exit, point_ref
 from simctl import BACNET_CLIENT_PORT, SimControl, SimError
+from telegraf_source import TelegrafError, TelegrafRunner, handled, ingest
 
 warnings.filterwarnings("ignore")
 logging.getLogger("pymodbus").setLevel(logging.CRITICAL)
 LATEST, ALERTS, HISTORY = {}, {}, {}           # HISTORY: các giá trị gần nhất của mỗi điểm, để vẽ xu hướng
 # round/at: lượt đọc gần nhất; read/ok_count/ms: kết quả lượt đó; auto: chu kỳ tự đọc (0 = chỉ đọc khi bấm)
-STATUS = {"round": 0, "at": None, "read": 0, "ok_count": 0, "ms": None, "auto": 0}
+STATUS = {"round": 0, "at": None, "read": 0, "ok_count": 0, "ms": None, "auto": 0,
+          "source": "python", "telegraf": None}       # telegraf: {interval, running, last, devices, logs} khi bật
+SOURCES = ("python", "telegraf")
+TELEGRAF_INTERVAL_MAX = 60
+RUNNER: TelegrafRunner | None = None
 CLIENT_LOCK = threading.Lock()                 # kết nối pymodbus không an toàn đa luồng: lượt đọc và lệnh ghi từ web
 DATA_LOCK = threading.Lock()                   # trang web đọc số liệu trong lúc vòng đọc đang cập nhật
 PAGE = Path(__file__).with_name("collector.html")
@@ -46,14 +59,15 @@ WEB = Path(__file__).resolve().parents[1] / "web"     # giao diện dùng chung 
 AUTO_MAX = 3600
 
 
-def poll_once(conns, cfg, device: str | None = None, point: str | None = None) -> dict:
-    """Đọc mọi điểm, hoặc chỉ một thiết bị / một điểm. Trả về {read, ok_count, ms}."""
+def poll_once(conns, cfg, device: str | None = None, point: str | None = None, only: set | None = None) -> dict:
+    """Đọc mọi điểm, hoặc chỉ một thiết bị / một điểm. only: chỉ các thiết bị này (nguồn Telegraf: phần Python đọc).
+    Trả về {read, ok_count, ms}."""
     rows, down = {}, set()                         # down: địa chỉ không kết nối được trong lượt này
     t0 = time.perf_counter()
     with CLIENT_LOCK:
         refresh_environment(cfg, conns)
         for d in cfg["devices"]:
-            if device is not None and d["name"] != device:
+            if (device is not None and d["name"] != device) or (only is not None and d["name"] not in only):
                 continue
             targets = [p for p in d["points"] if point is None or f"{d['name']}.{p['name']}" == point]
             if not targets:
@@ -66,7 +80,7 @@ def poll_once(conns, cfg, device: str | None = None, point: str | None = None) -
             silent = False                             # thiết bị không trả lời: bỏ qua các điểm còn lại trong lượt
             for p in targets:
                 key = f"{d['name']}.{p['name']}"
-                row = {"unit": p.get("unit", ""), "at": time.strftime("%H:%M:%S")}
+                row = {"unit": p.get("unit", ""), "at": time.strftime("%H:%M:%S"), "source": "python"}
                 if ep in down:
                     row.update(value=None, ok=False, **_error_row("read.unreachable", endpoint=ep))
                 elif silent:
@@ -112,6 +126,11 @@ def refresh_environment(cfg: dict, conns) -> bool:
         print(f"Simulator tại {auto['sim_url']} không khớp Point Map: {'; '.join(e.errors)}")
         return False
     conns.close()
+    if STATUS["source"] == "telegraf" and RUNNER is not None:     # Telegraf đọc theo địa chỉ mới
+        try:
+            RUNNER.start(new)
+        except TelegrafError as e:
+            print(f"Không chạy lại được Telegraf: {e}")
     with DATA_LOCK:
         cfg.clear()
         cfg.update(new, auto=dict(auto, env_cfg=env_cfg))
@@ -146,6 +165,45 @@ def print_table():
         print(f"  {k:28} {val}")
 
 
+def _fresh(points: dict) -> dict:
+    """Điểm Telegraf không gửi về quá 3 chu kỳ: báo lỗi "cũ" thay vì hiện giá trị cũ như còn sống."""
+    tg = STATUS.get("telegraf") or {}
+    limit = 3 * tg.get("interval", 2) + 1
+    now, out = time.time(), {}
+    for k, r in points.items():
+        age = now - r["ts"] if r.get("source") == "telegraf" and r.get("ts") else 0
+        out[k] = dict(r, value=None, ok=False, **_error_row("telegraf.stale", s=int(age))) if age > limit else r
+    return out
+
+
+def telegraf_python_devices(cfg) -> set:
+    """Nguồn Telegraf: thiết bị Telegraf không đọc được, Python đọc thay (BACnet, RS-485 ở cổng ảo trên máy)."""
+    return {d["name"] for d in cfg["devices"]} - set(handled(cfg))
+
+
+def set_source(cfg, source: str, interval: int = 2) -> None:
+    """Đổi nguồn số liệu. telegraf: sinh cấu hình từ Point Map, chạy container; python: dừng container."""
+    global RUNNER
+    if source == "telegraf":
+        if RUNNER is None or RUNNER.interval != interval:
+            if RUNNER is not None:
+                RUNNER.stop()
+            RUNNER = TelegrafRunner(f"http://127.0.0.1:{Web.port}/api/telegraf", interval,
+                                    name=f"modbus-lab-telegraf-{Web.port}")
+        with CLIENT_LOCK:
+            RUNNER.start(cfg)
+        STATUS.update(source="telegraf", auto=0,
+                      telegraf={"interval": interval, "running": True, "last": None, "devices": RUNNER.devices,
+                                "python": sorted(telegraf_python_devices(cfg)), "logs": []})
+        print(f"  ~~ Nguồn Telegraf ({RUNNER.name}): Telegraf đọc {', '.join(RUNNER.devices)} mỗi {interval} giây; "
+              f"Python đọc {', '.join(STATUS['telegraf']['python']) or 'không thiết bị nào'}")
+    else:
+        if RUNNER is not None:
+            RUNNER.stop()
+        STATUS.update(source="python", telegraf=None)
+        print("  ~~ Nguồn Python: collector tự đọc, đọc khi bấm")
+
+
 def snapshot(cfg):
     """Mọi thứ trang web cần trong một lần gọi. Gọi khi đang giữ DATA_LOCK."""
     devices = [{"name": d["name"], "label": d["label"], "device_id": d.get("device_id"),
@@ -159,7 +217,7 @@ def snapshot(cfg):
                            for p in d["points"]]}
                for d in cfg["devices"]]
     return {"site": cfg.get("site"), "env": cfg.get("env"),
-            "points": LATEST,
+            "points": _fresh(LATEST),
             "alerts": [k for k, v in ALERTS.items() if v],
             "devices": devices,
             "alert_rules": [dict(a, firing=bool(ALERTS.get(a["point"]))) for a in cfg.get("alerts", [])],
@@ -168,9 +226,22 @@ def snapshot(cfg):
 
 
 def auto_loop(conns, cfg):
-    """Tự đọc theo STATUS["auto"] giây; 0 = nằm chờ. Chạy nền suốt đời tiến trình."""
-    last = 0.0
-    while True:
+    """Tự đọc theo STATUS["auto"] giây; 0 = nằm chờ. Nguồn Telegraf: đọc phần Python (BACnet, RS-485 cổng ảo)
+    theo chu kỳ của Telegraf và theo dõi container. Chạy nền suốt đời tiến trình."""
+    last = checked = 0.0
+    while Web.cfg is cfg:                          # serve() lần nữa với cấu hình khác: luồng cũ dừng, không đọc chồng
+        tg = STATUS.get("telegraf")
+        if STATUS["source"] == "telegraf" and tg:
+            if time.monotonic() - last >= tg["interval"]:
+                last = time.monotonic()
+                only = telegraf_python_devices(cfg)
+                if only:
+                    poll_once(conns, cfg, only=only)
+            if RUNNER is not None and time.monotonic() - checked >= 5:
+                checked = time.monotonic()
+                tg.update(running=RUNNER.running(), logs=RUNNER.logs())
+            time.sleep(0.1)
+            continue
         interval = STATUS["auto"]
         if interval and time.monotonic() - last >= interval:
             last = time.monotonic()
@@ -180,7 +251,7 @@ def auto_loop(conns, cfg):
 
 
 class Web(BaseHTTPRequestHandler):
-    cfg = conns = frames = audit = None            # gán trong serve()
+    cfg = conns = frames = audit = port = None     # gán trong serve()
 
     def log_message(self, *a):
         pass
@@ -251,6 +322,10 @@ class Web(BaseHTTPRequestHandler):
             return self.write()
         if path == "/api/relinquish":
             return self.write(relinquish=True)
+        if path == "/api/telegraf":
+            return self.telegraf()
+        if path == "/api/source":
+            return self.source()
         self.reply(404, {"ok": False, **ApiError("api.not_found").as_json()})
 
     def read(self):
@@ -270,6 +345,45 @@ class Web(BaseHTTPRequestHandler):
         with DATA_LOCK:
             snap = json.loads(json.dumps(snapshot(self.cfg), ensure_ascii=False))
         self.reply(200, {"ok": True, **result, "snapshot": snap})
+
+    def telegraf(self):
+        """Số liệu Telegraf gửi về (outputs.http). Đang ở nguồn Python thì bỏ qua (container cũ còn gửi nốt)."""
+        raw = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode("utf-8", "replace")
+        try:
+            payload = json.loads(raw)
+        except ValueError:
+            payload = raw                              # JSON Lines
+        try:
+            rows = ingest(payload, self.cfg)
+        except (ValueError, TypeError, KeyError, AttributeError):
+            return self.reply(400, {"ok": False, **ApiError("api.bad_telegraf_payload").as_json()})
+        with DATA_LOCK:
+            LATEST.update(rows)
+            for k, r in rows.items():
+                HISTORY.setdefault(k, deque(maxlen=60)).append(r["value"])
+            if STATUS.get("telegraf"):
+                STATUS["telegraf"]["last"] = time.strftime("%H:%M:%S")
+            check_alerts(self.cfg)
+        self.reply(200, {"ok": True, "points": len(rows)})
+
+    def source(self):
+        try:
+            req = self.body()
+            source, interval = req.get("source"), req.get("interval", 2)
+            ok = source in SOURCES and isinstance(interval, int) and not isinstance(interval, bool) \
+                and 1 <= interval <= TELEGRAF_INTERVAL_MAX
+        except ValueError:
+            ok = False
+        if not ok:
+            return self.reply(400, {"ok": False, **ApiError("api.bad_source_request",
+                                                            max=TELEGRAF_INTERVAL_MAX).as_json()})
+        try:
+            set_source(self.cfg, source, interval)
+        except TelegrafError as e:
+            print(f"  xx Không chạy được Telegraf: {e}")
+            STATUS.update(source="python", telegraf=None)
+            return self.reply(502, {"ok": False, **e.as_json()})
+        self.reply(200, {"ok": True, "source": source, "telegraf": STATUS["telegraf"]})
 
     def auto(self):
         try:
@@ -324,9 +438,14 @@ def serve(cfg, conns, host="127.0.0.1", port=8080, frames=500, audit=None):
     conns.trace(log)
     Web.cfg, Web.conns, Web.frames, Web.audit = cfg, conns, log, audit
     srv = ThreadingHTTPServer((host, port), Web)
+    Web.port = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     threading.Thread(target=auto_loop, args=(conns, cfg), daemon=True).start()
     return srv
+
+
+def _exit_on_sigterm(*_) -> None:
+    raise SystemExit(0)                            # để atexit chạy: dừng container Telegraf
 
 
 def load_config(path: str, env: str, sim_url: str | None = None, bacnet_port: int = BACNET_CLIENT_PORT) -> dict:
@@ -362,6 +481,10 @@ if __name__ == "__main__":
     ap.add_argument("--web-port", type=int, default=8080)
     ap.add_argument("--frames", type=int, default=500, help="số cặp khung tin gần nhất giữ lại để xem")
     ap.add_argument("--audit", default=AUDIT_PATH, help=f"nhật ký kiểm toán lệnh ghi (mặc định {AUDIT_PATH})")
+    ap.add_argument("--source", choices=SOURCES, default="python",
+                    help="python = collector tự đọc (mặc định, đọc khi bấm, xem khung tin); "
+                         "telegraf = Telegraf thật trong Docker đọc Modbus / SNMP (đổi được trên trang)")
+    ap.add_argument("--telegraf-interval", type=int, default=2, help="chu kỳ đọc của Telegraf, giây (1-60)")
     args = ap.parse_args()
     if not 0 <= args.interval <= AUTO_MAX:
         ap.error(f"--interval phải từ 0 đến {AUTO_MAX}")
@@ -373,7 +496,16 @@ if __name__ == "__main__":
         raise SystemExit
     STATUS["auto"] = args.interval
     serve(cfg, c, args.web_host, args.web_port, args.frames, AuditLog(args.audit))
-    mode = f"tự đọc mỗi {args.interval} giây" if args.interval else "đọc khi bấm nút trên trang"
+    atexit.register(lambda: RUNNER and RUNNER.stop())   # tắt collector = dừng luôn container Telegraf
+    # SIGTERM (timeout, docker stop, kill) mặc định thoát ngay, bỏ qua atexit: đổi thành thoát bình thường
+    signal.signal(signal.SIGTERM, _exit_on_sigterm)
+    if args.source == "telegraf":
+        try:
+            set_source(cfg, "telegraf", args.telegraf_interval)
+        except TelegrafError as e:
+            raise SystemExit(f"LỖI: {e}")
+    mode = (f"nguồn Telegraf, đọc mỗi {args.telegraf_interval} giây" if args.source == "telegraf" else
+            f"tự đọc mỗi {args.interval} giây" if args.interval else "đọc khi bấm nút trên trang")
     print(f"Collector site {cfg.get('site', '?')}, môi trường {args.env}, {mode}. "
           f"Xem tại http://{args.web_host}:{args.web_port}  (Ctrl+C để dừng)")
     try:

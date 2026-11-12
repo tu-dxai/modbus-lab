@@ -44,7 +44,7 @@ def test_software_parts_carry_status(model):
     assert all(p["status"] in STATUSES for p in parts)
     status = {p["id"]: p["status"] for p in parts}
     assert status["bacnet-collector"] == "ready" and status["write-service"] == "ready"
-    assert status["telegraf"] == "partial"                       # cấu hình sinh ra, chưa chạy Telegraf thật
+    assert status["telegraf"] == "ready"                         # Telegraf 1.32 thật đọc simulator (nguồn Telegraf)
     assert status["mqtt"] == status["dcim"] == status["itsm"] == "planned"
 
 

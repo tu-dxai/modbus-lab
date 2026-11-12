@@ -5,7 +5,7 @@ kiểm thử đặt và đứng yên tới khi đổi; simulator ghi lại mọi
 "với đầu vào X, client có ghi đúng Y vào đúng thiết bị không". Thiết bị giả nói đủ bốn kiểu kết nối của container:
 **Modbus TCP** (đồng hồ điện sau gateway, pin BESS), **Modbus RTU** qua cổng serial ảo (đồng hồ RS-485), **SNMP**
 (UPS) và **BACnet/IP** (điều hòa CRAH, ghi kèm mức ưu tiên và nhả lệnh). Kèm collector mẫu có trang web, công cụ ghi
-có rào chắn và nhật ký kiểm toán, bộ sinh cấu hình Telegraf từ Point Map, bộ kiểm tra Point Map, sơ đồ DC (EPMS, BMS, edge, DCIM) và 316 bài kiểm thử
+có rào chắn và nhật ký kiểm toán, Telegraf thật (Docker) đọc thiết bị theo cấu hình sinh từ Point Map, bộ kiểm tra Point Map, sơ đồ DC (EPMS, BMS, edge, DCIM) và 330 bài kiểm thử
 tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng Nhật**.
 
 ## Có gì trong thư mục
@@ -19,6 +19,7 @@ tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng N
 | `edge/modbus/async_bridge.py` | Vòng lặp asyncio chạy nền để code đồng bộ gọi thư viện async (pysnmp, bacpypes3) |
 | `edge/snmp/snmp_io.py` | Đọc điểm SNMP (GET theo OID, v1/v2c) |
 | `edge/collectors/bacnet/bacnet_io.py` | Collector Python cho BACnet/IP: đọc presentValue, ghi kèm priority, nhả lệnh (relinquish) |
+| `tools/dashboard/telegraf_source.py`, `edge/collectors/telegraf/lab-collector.conf` | **Nguồn Telegraf** của collector: chạy Docker `telegraf:1.32`, nhận số liệu Telegraf gửi về |
 | `edge/collectors/telegraf/generate.py` | `make telegraf`: **sinh cấu hình Telegraf** (`inputs.modbus` TCP/RTU, `inputs.snmp`) từ Point Map |
 | `i18n/messages.yml` | **Từ điển song ngữ vi/ja**: mọi chữ trên hai trang web và mọi thông báo lỗi trang web hiển thị |
 | `i18n/i18n.py`, `i18n.js` | Dịch phía server (lỗi mang mã) và phía trình duyệt (nút đổi ngôn ngữ, dịch chữ và lỗi) |
@@ -41,7 +42,7 @@ tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng N
 | `tests/acceptance/` | 20 bài kiểm thử nghiệm thu, mã MB-xx khớp tài liệu nghiên cứu |
 | `tests/point_map/` | 68 bài kiểm thử bộ kiểm tra Point Map và môi trường, mỗi loại lỗi một bài |
 | `tests/simulator/` | 156 bài kiểm thử simulator: đặt giá trị, tự thay đổi, bật/tắt thiết bị, sơ đồ DC, nhật ký lệnh ghi, khung tin thô (cả SNMP, BACnet), RTU, SNMP, BACnet |
-| `tests/tools/` | 43 bài kiểm thử collector: đọc khi bấm, tự đọc, ghi, nhả lệnh BACnet, khung tin phía client, song ngữ |
+| `tests/tools/` | 57 bài kiểm thử collector: đọc khi bấm, tự đọc, ghi, nhả lệnh BACnet, khung tin phía client, nguồn Telegraf (chạy Telegraf thật), song ngữ |
 | `tests/telegraf/` | 9 bài kiểm thử cấu hình Telegraf sinh ra (chỉ kiểm cấu trúc, chưa chạy Telegraf thật) |
 | `tests/write_service/` | 8 bài kiểm thử nhật ký kiểm toán: ghi được, bị chặn, bị từ chối, ghi từ web |
 | `tests/translations/` | 12 bài kiểm thử từ điển: đủ vi và ja, khớp tham số, mọi khóa trang web và code dùng đều có |
@@ -254,7 +255,7 @@ mặc định của thiết bị (giá trị khi không ai ra lệnh); `make res
 Client BACnet phải gửi từ cổng khác cổng thiết bị khi chạy cùng máy (Point Map `bacnet.client`, lab `127.0.0.1:47809`).
 Ghi vào `analog-input` bị thiết bị từ chối (`write-access-denied`), và lệnh đó vẫn có trong `make writes`.
 
-## Sinh cấu hình Telegraf
+## Telegraf: đọc thiết bị như edge thật
 
 ```bash
 make telegraf                 # môi trường site (địa chỉ thật) -> edge/collectors/telegraf/telegraf.site.conf
@@ -262,11 +263,31 @@ make telegraf ENV=lab         # trỏ vào simulator -> telegraf.lab.conf
 make telegraf ARGS="--out -"  # in ra màn hình
 ```
 
-Mỗi kết nối Modbus (TCP `host:port` hoặc cổng serial RTU) một khối `inputs.modbus` (`configuration_type = "request"`,
-`slave_id`, `byte_order`, `scale` từ Point Map); mỗi agent SNMP một khối `inputs.snmp`. Thiết bị BACnet được ghi chú ở
-đầu file và bỏ qua — collector Python đọc chúng. File sinh ra không đưa vào git; đừng sửa tay, sửa Point Map rồi sinh
-lại. **Chưa chạy thử với Telegraf thật**: kiểm thử chỉ kiểm cấu trúc; trước khi dùng hãy chạy
-`telegraf --config <file> --test` với simulator.
+Mỗi kết nối Modbus (TCP `host:port`, cổng serial RTU, hoặc bus RS-485 qua TCP → `RTUoverTCP`) một khối `inputs.modbus`
+(`configuration_type = "request"`, `slave_id`, `byte_order`, `scale` từ Point Map); mỗi agent SNMP một khối `inputs.snmp`.
+Thiết bị BACnet được ghi chú ở đầu file và bỏ qua — Telegraf không có plugin BACnet. File sinh ra không đưa vào git;
+đừng sửa tay, sửa Point Map rồi sinh lại.
+
+**Chạy Telegraf thật trên trang collector** — chọn **Nguồn: Telegraf** ở góc trên bảng điểm đo (hoặc
+`make collect ARGS="--source telegraf"`). Collector sinh cấu hình từ Point Map vào `var/telegraf/devices.conf` và chạy
+container `telegraf:1.32` (cùng bản demo A04, mạng host) với `edge/collectors/telegraf/lab-collector.conf`; Telegraf đọc
+mỗi 2 giây và gửi số liệu về collector (`POST /api/telegraf`) thay cho MQTT của edge thật. Mỗi điểm ghi rõ do
+**Telegraf** hay **Python** đọc:
+
+| Thiết bị | Nguồn Telegraf |
+|---|---|
+| Modbus TCP (gateway, IP riêng), SNMP | Telegraf đọc |
+| Bus RS-485 qua TCP (simulator Docker demo A04: `10.20.0.60:7000`; `make sim ARGS="--serial-tcp /dev/ttyUSB0=HOST:PORT"`) | Telegraf đọc (RTUoverTCP) |
+| Bus RS-485 ở cổng serial ảo trên máy (`make sim` mặc định) | Python đọc — không đưa cổng ảo vào container |
+| BACnet | Python đọc — Telegraf không có plugin (demo A04 dùng `inputs.execd` chạy script Python) |
+
+Điểm Telegraf không gửi về quá 3 chu kỳ báo lỗi **"Telegraf không gửi số liệu ... giây"** (thiết bị tắt, không trả lời,
+hoặc Telegraf dừng); rê chuột lên dòng trạng thái để xem log lỗi của Telegraf. Ở nguồn Telegraf không có nút Đọc và khung
+tin Modbus / SNMP phía collector (byte do Telegraf gửi) — chuyển về **Python** để debug từng lệnh, hoặc xem khung tin
+phía thiết bị bằng `make frames`. Ghi vẫn đi qua write-service. Tắt collector (Ctrl+C, SIGTERM) thì container cũng được gỡ.
+
+Cần Docker và image `telegraf:1.32` (`docker pull telegraf:1.32`; đã có nếu từng build demo A04). Kiểm thử chạy Telegraf
+thật với simulator và so từng giá trị (byte order, số âm, hệ số, RTU qua TCP); không có Docker thì các bài đó tự bỏ qua.
 
 ## Xem khung tin thô (Modbus, SNMP, BACnet)
 
@@ -398,6 +419,7 @@ Demo A04 dùng cách này để bus RS-485 của simulator trong Docker đọc �
 | RTU | Cổng serial ảo; đọc, ghi, CRC đúng và sai; khung tin RTU ở collector và simulator; bus bận |
 | SNMP | Point Map (OID, version, community); đọc theo hệ số; OID không có; agent không trả lời; Telegraf `inputs.snmp` |
 | BACnet | Point Map (đối tượng, priority, client); đọc analog/binary; ghi kèm priority rồi nhả lệnh; thiết bị từ chối ghi input; simulator ghi nhận lệnh |
+| Telegraf thật | Telegraf 1.32 trong Docker đọc mọi điểm Modbus TCP, RTU qua TCP, SNMP đúng như simulator; BACnet vẫn Python; đặt giá trị tới được Telegraf; thiết bị tắt thành "cũ"; tắt collector bằng SIGTERM gỡ container |
 | Telegraf | Một khối cho mỗi kết nối; TCP và RTU; byte order, slave_id, scale; SNMP; bỏ qua BACnet |
 | Kiểm toán | Ghi được, bị chặn, bị thiết bị từ chối, nhả lệnh; ghi từ web kèm địa chỉ người ghi |
 | Bản dịch | Mỗi khóa đủ vi và ja, cùng tham số; mọi khóa trang web và code dùng đều có; xuất bảng duyệt |

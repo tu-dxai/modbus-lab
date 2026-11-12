@@ -14,7 +14,7 @@ PAGES = [ROOT / "tools/dashboard/collector.html", ROOT / "tools/simulator/contro
          ROOT / "tools/web/diagram.js"]
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
 # Mã lỗi trong code Python: lớp lỗi dịch được, gọi với chuỗi mã làm đối số đầu tiên.
-PY_CODE = re.compile(r"\b(?:WriteBlocked|WriteFailed|ReadError|BadValue|UnknownPoint|UnknownDevice|ApiError)\(\s*\"([a-z0-9_.]+)\"")
+PY_CODE = re.compile(r"\b(?:WriteBlocked|WriteFailed|ReadError|BadValue|UnknownPoint|UnknownDevice|TelegrafError|ApiError)\(\s*\"([a-z0-9_.]+)\"")
 JS_KEY = re.compile(r"""data-i18n(?:-title|-placeholder)?="([a-z0-9_.]+)"|\bt\(\s*'([a-z0-9_.]+)'"""
                     r"""|iconButton\(\s*'\w+',\s*'([a-z0-9_.]+)'""")
 

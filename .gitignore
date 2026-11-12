@@ -18,3 +18,4 @@ __pycache__/
 var/
 # Cấu hình Telegraf sinh từ Point Map (make telegraf)
 edge/collectors/telegraf/*.conf
+!edge/collectors/telegraf/lab-collector.conf

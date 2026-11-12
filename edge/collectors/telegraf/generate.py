@@ -13,7 +13,8 @@ Modbus (plugin inputs.modbus, configuration_type = "request"):
 SNMP (plugin inputs.snmp): mỗi thiết bị một [[inputs.snmp]], mỗi điểm một [[inputs.snmp.field]].
 BACnet: Telegraf không đọc; collector Python đọc (theo CLAUDE.md), nên bỏ qua và ghi chú ở đầu file.
 
-Cấu hình chỉ được kiểm cú pháp và đối chiếu Point Map trong bộ kiểm thử, CHƯA chạy thử với Telegraf thật.
+Bộ kiểm thử đối chiếu cấu hình với Point Map (tests/telegraf/) và chạy Telegraf 1.32 thật trong Docker với simulator,
+so từng giá trị đọc được (tests/tools/test_telegraf_source.py). Collector chạy cấu hình này khi chọn nguồn Telegraf.
 """
 import argparse, json, sys
 from pathlib import Path
@@ -104,6 +105,7 @@ def _snmp(cfg: dict, lines: list[str]) -> None:
                   f"  community = {q(s.get('community', 'public'))}",
                   f"  timeout = {q(timeout)}",
                   "  retries = 1",
+                  '  agent_host_tag = "source"',
                   '  name = "snmp"',
                   "  [inputs.snmp.tags]",
                   f"    site = {q(cfg.get('site', ''))}",
@@ -127,7 +129,7 @@ def generate(cfg: dict, inputs_only: bool = False) -> str:
              "#  CẤU HÌNH TELEGRAF — SINH TỰ ĐỘNG TỪ POINT MAP, ĐỪNG SỬA TAY",
              f"#  Site: {cfg.get('site', '?')} · môi trường: {cfg.get('env', '?')}",
              "#  Sinh lại: make telegraf (edge/collectors/telegraf/generate.py)",
-             "#  Chưa chạy thử với Telegraf thật — kiểm bằng: telegraf --config <file> --test",
+             "#  Đã chạy thật với Telegraf 1.32 và simulator (tests/tools/test_telegraf_source.py)",
              f"#  Bỏ qua (collector Python đọc BACnet): {', '.join(skipped) or 'không có'}",
              "# ============================================================="]
     if not inputs_only:

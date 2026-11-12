@@ -106,6 +106,22 @@ api.not_found:           { vi: "không có đường dẫn này", ja: "このパ
 api.bad_write_request:   { vi: "yêu cầu cần JSON gồm point (tên điểm) và value (số)",
                            ja: "point（計測点名）と value（数値）を含む JSON が必要です" }
 api.bad_state_request:   { vi: "yêu cầu cần JSON dạng tên điểm: giá trị", ja: "「計測点名: 値」形式の JSON が必要です" }
+dash.source:             { vi: "Nguồn",              ja: "ソース" }
+dash.source_hint:        { vi: "Python: collector tự đọc, đọc khi bấm, xem khung tin — để debug. Telegraf: Telegraf thật (Docker telegraf:1.32) đọc định kỳ như edge thật; BACnet vẫn do Python đọc.",
+                           ja: "Python：コレクター自身が読み取り（手動読み取り、フレーム表示）— デバッグ用。Telegraf：実際の Telegraf（Docker telegraf:1.32）が本番エッジと同様に定期読み取り。BACnet は引き続き Python が読み取り。" }
+dash.tg_starting:        { vi: "Đang chạy Telegraf…", ja: "Telegraf を起動中…" }
+dash.tg_waiting:         { vi: "Telegraf đang chạy, chưa gửi số liệu về", ja: "Telegraf 稼働中、まだデータが届いていません" }
+dash.tg_status:          { vi: "Telegraf đọc {n} thiết bị mỗi {s} giây · nhận lúc {at}", ja: "Telegraf が {n} 台を {s} 秒ごとに読み取り · {at} に受信" }
+dash.tg_stopped:         { vi: "Telegraf đã dừng — rê chuột để xem log", ja: "Telegraf が停止しました — カーソルを合わせるとログを表示" }
+dash.tg_devices:         { vi: "Telegraf đọc: {tg} · Python đọc: {py}", ja: "Telegraf：{tg} · Python：{py}" }
+api.bad_source_request:  { vi: "yêu cầu cần source là python hoặc telegraf, interval là số giây nguyên 1–{max}",
+                           ja: "source は python か telegraf、interval は 1～{max} の整数秒で指定してください" }
+api.bad_telegraf_payload: { vi: "số liệu Telegraf gửi về không đúng dạng JSON của Telegraf", ja: "Telegraf から届いたデータが Telegraf の JSON 形式ではありません" }
+telegraf.stale:          { vi: "Telegraf không gửi số liệu điểm này {s} giây (thiết bị không trả lời, tắt, hoặc Telegraf dừng)",
+                           ja: "Telegraf からこの計測点のデータが {s} 秒届いていません（機器が応答しない・停止・Telegraf 停止）" }
+telegraf.no_docker:      { vi: "máy không có docker — cài Docker để chạy Telegraf (image telegraf:1.32)",
+                           ja: "docker がありません — Telegraf（イメージ telegraf:1.32）を動かすには Docker を導入してください" }
+telegraf.start_failed:   { vi: "không chạy được Telegraf: {detail}", ja: "Telegraf を起動できません：{detail}" }
 api.bad_power_request:   { vi: "yêu cầu cần JSON gồm device (tên thiết bị) và on (true hoặc false)",
                            ja: "device（機器名）と on（true または false）を含む JSON が必要です" }
 api.bad_since:           { vi: "since phải là số nguyên", ja: "since は整数で指定してください" }
@@ -244,6 +260,8 @@ frames.clear:      { vi: "Xóa",                ja: "消去" }
 frames.empty:      { vi: "Chưa có khung tin nào.", ja: "フレームはまだありません。" }
 frames.paused:     { vi: "Đang tạm dừng — khung tin mới không hiện thêm.", ja: "一時停止中 — 新しいフレームは表示されません。" }
 frames.unknown_device: { vi: "Unit ID {id} không có ở {endpoint}", ja: "{endpoint} に Unit ID {id} はありません" }
+frames.telegraf_note:    { vi: "Nguồn Telegraf: byte Telegraf gửi cho Modbus / SNMP không bắt được ở đây — chỉ thấy phần Python đọc (BACnet, RS-485 cổng ảo) và lệnh ghi. Xem khung tin phía thiết bị: make frames.",
+                           ja: "Telegraf ソース：Telegraf が送る Modbus／SNMP のバイトはここでは取得できません — Python が読む部分（BACnet、仮想ポートの RS-485）と書き込みのみ表示。機器側のフレームは make frames で確認できます。" }
 frames.unknown_endpoint: { vi: "Không có thiết bị nào ở {endpoint}", ja: "{endpoint} に機器はありません" }
 
 # ---------- thành phần giao diện dùng chung (tools/web/ui.css) ----------
@@ -347,6 +365,9 @@ help.sys_def_itsm:       { vi: "IT Service Management — quy trình vận hành
 help.sys_term_edge:      { vi: "Edge",                ja: "エッジ" }
 help.sys_def_edge:       { vi: "Máy tính đặt ngay trong container: đọc mọi thiết bị (Telegraf, collector BACnet), cảnh báo tại chỗ, ghi lệnh qua rào chắn, rồi gửi lên DCIM qua MQTT. Vẫn chạy khi mất mạng ra ngoài (WAN), nên an toàn không phụ thuộc trung tâm.",
                            ja: "コンテナ内に置くコンピューター。全機器を読み取り（Telegraf、BACnet コレクター）、現地でアラートを出し、ガード経由で指令を書き込み、MQTT で DCIM へ送ります。WAN が切れても動作するため、安全性は中央に依存しません。" }
+help.sys_term_telegraf:  { vi: "Telegraf",            ja: "Telegraf" }
+help.sys_def_telegraf:   { vi: "Chương trình thu thập số liệu mã nguồn mở (InfluxData) chạy ở edge: đọc Modbus, SNMP theo chu kỳ, gửi đi (MQTT ở edge thật). Cấu hình sinh từ Point Map. Trên trang collector chọn Nguồn: Telegraf để xem Telegraf thật (Docker) đọc simulator.",
+                           ja: "エッジで動くオープンソースのデータ収集ツール（InfluxData）：Modbus・SNMP を周期的に読み取り送信（本番エッジでは MQTT）。設定は Point Map から生成。コレクター画面でソースを Telegraf にすると、実際の Telegraf（Docker）がシミュレーターを読む様子を確認できます。" }
 help.sys_term_ups:       { vi: "UPS",                 ja: "UPS" }
 help.sys_def_ups:        { vi: "Bộ lưu điện: mất điện lưới thì cấp điện từ ắc quy ngay lập tức, không gián đoạn, đủ thời gian để máy phát hoặc BESS vào thay. Nguồn ra = 5 nghĩa là UPS đang chạy bằng pin.",
                            ja: "無停電電源装置：商用電源が途絶えると瞬時にバッテリーから給電し、発電機や BESS へ切り替える時間を稼ぎます。出力電源 = 5 はバッテリー運転中を意味します。" }
@@ -455,8 +476,8 @@ topo.edge_hint:          { vi: "chạy tại container, vẫn chạy khi mất W
 topo.part.point_map:     { vi: "Point Map",          ja: "Point Map" }
 topo.note.point_map:     { vi: "Nguồn dữ liệu duy nhất: thiết bị, điểm đo, cảnh báo, sơ đồ này", ja: "唯一のデータ源：機器、計測点、アラート、この図" }
 topo.part.telegraf:      { vi: "Telegraf",           ja: "Telegraf" }
-topo.note.telegraf:      { vi: "Đọc Modbus và SNMP. Cấu hình sinh từ Point Map; chưa chạy thử với Telegraf thật",
-                           ja: "Modbus と SNMP を読み取り。設定は Point Map から生成。実機の Telegraf では未検証" }
+topo.note.telegraf:      { vi: "Đọc Modbus và SNMP theo cấu hình sinh từ Point Map. Lab: Docker telegraf:1.32, collector chọn Nguồn: Telegraf",
+                           ja: "Point Map から生成した設定で Modbus と SNMP を読み取り。ラボ：Docker telegraf:1.32、コレクターでソース：Telegraf を選択" }
 topo.part.bacnet_collector: { vi: "Collector BACnet", ja: "BACnet コレクター" }
 topo.note.bacnet_collector: { vi: "Python: đọc BACnet, ghi kèm mức ưu tiên, nhả lệnh", ja: "Python：BACnet の読み取り、優先度付き書き込み、指令の解除" }
 topo.part.write_service: { vi: "Write-service",      ja: "書き込みサービス" }

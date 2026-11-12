@@ -12,6 +12,9 @@
   #lastread.ok { color: var(--ok); } #lastread.err { color: var(--err); }
   #auto { padding: 3px 6px; font-size: 13px; }
   .hint-row td { color: var(--muted); text-align: center; padding: 22px 12px; background: var(--panel-2); }
+  .tg-mode .py-only { display: none !important; }
+  .src-tag { font-size: 11px; color: var(--faint); margin-left: 4px; }
+  .src-tag.telegraf { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -39,8 +42,10 @@
         <h2 id="title"></h2><span id="sub" class="sub"></span>
         <div class="tools">
           <span id="lastread" class="small muted num"></span>
-          <label class="chk small"><span data-i18n="dash.auto"></span><select id="auto" class="field"></select></label>
-          <button id="read" class="btn primary" data-icon="read"><span id="read-label"></span></button>
+          <label class="chk small" data-i18n-title="dash.source_hint"><span data-i18n="dash.source"></span>
+            <span id="source" class="seg"><button data-source="python">Python</button><button data-source="telegraf">Telegraf</button></span></label>
+          <label class="chk small py-only"><span data-i18n="dash.auto"></span><select id="auto" class="field"></select></label>
+          <button id="read" class="btn primary py-only" data-icon="read"><span id="read-label"></span></button>
         </div>
       </div>
       <div class="scroll">
@@ -79,6 +84,7 @@
           </div>
         </div>
         <div id="f-paused" class="paused" hidden data-i18n="frames.paused"></div>
+        <div id="f-telegraf" class="paused" hidden data-i18n="frames.telegraf_note"></div>
         <div class="split">
           <div class="scroll">
             <table class="grid dense fixed">
@@ -171,7 +177,7 @@ function pointRow(s, d, p) {
   const at = el('td', 'hide-sm muted num small');
   const ctl = el('td', 'ctl');
   const r = { tr: tr_, num, spark, status, at, unit: p.unit };
-  const one = iconButton('read', 'dash.read_point_hint');
+  const one = iconButton('read', 'dash.read_point_hint', 'py-only');
   one.onclick = () => readNow({ point: p.key });
   ctl.append(one);
   tr_.append(name, value, trend, status, at, ctl);
@@ -242,6 +248,9 @@ function update(s) {
       r.status.replaceChildren(ok);
     } else r.status.replaceChildren();
     r.at.textContent = p ? p.at : '';
+    if (p && s.status.source === 'telegraf') {        // nguồn Telegraf: ghi rõ điểm nào Telegraf đọc, điểm nào Python
+      r.at.append(el('span', 'src-tag ' + (p.source || 'python'), p.source === 'telegraf' ? 'Telegraf' : 'Python'));
+    }
     if (flashKeys.has(key)) { r.tr.classList.remove('flash'); void r.tr.offsetWidth; r.tr.classList.add('flash'); }
     sparkline(r.spark, s.history[key] || []);
   }
@@ -257,23 +266,64 @@ function update(s) {
 
   flashKeys = new Set();
   const ok = Object.values(s.points).filter(p => p.ok).length, total = Object.keys(s.points).length;
-  if (!s.status.round) setConn('idle', 'dash.status_idle');
+  const tg = s.status.source === 'telegraf' ? s.status.telegraf : null;
+  const hasData = s.status.round || (tg && total);
+  if (!hasData) setConn('idle', 'dash.status_idle');
   else if (total && ok === total) setConn('ok', 'dash.status_ok');
   else if (ok > 0) setConn('warn', 'dash.status_partial');
   else setConn('err', 'dash.status_down');
   $('#site').textContent = s.site ? t('dash.site', { site: s.site, env: s.env }) : '';
-  $('#info').textContent = s.status.round ? t('dash.round', { round: s.status.round, at: s.status.at, ok, total }) : '';
+  $('#info').textContent = s.status.round && !tg ? t('dash.round', { round: s.status.round, at: s.status.at, ok, total }) : '';
   const lr = $('#lastread');
-  lr.textContent = s.status.round ? t('dash.read_done', { n: s.status.read, ok: s.status.ok_count, ms: s.status.ms }) : '';
-  lr.className = 'small num ' + (!s.status.round ? 'muted' : s.status.ok_count === s.status.read ? 'ok' : 'err');
+  if (tg) {                                          // nguồn Telegraf: trạng thái container và lần nhận cuối
+    lr.textContent = !tg.running ? t('dash.tg_stopped') : tg.last
+      ? t('dash.tg_status', { n: tg.devices.length, s: tg.interval, at: tg.last }) : t('dash.tg_waiting');
+    lr.className = 'small num ' + (!tg.running ? 'err' : tg.last ? 'ok' : 'muted');
+    lr.title = [t('dash.tg_devices', { tg: tg.devices.join(', '), py: tg.python.join(', ') || '—' }),
+                ...(tg.logs || [])].join('\n');
+  } else {
+    lr.textContent = s.status.round ? t('dash.read_done', { n: s.status.read, ok: s.status.ok_count, ms: s.status.ms }) : '';
+    lr.className = 'small num ' + (!s.status.round ? 'muted' : s.status.ok_count === s.status.read ? 'ok' : 'err');
+    lr.title = '';
+  }
+  showSource(s.status.source);
   $('#read-label').textContent = t(reading ? 'dash.reading' : selected === ALL ? 'dash.read_all' : 'dash.read_device');
   $('#read').disabled = reading;
   $('#auto').value = String(s.status.auto);
-  if (!s.status.round && !$('#rows .hint-row')) {
+  if (!hasData && !$('#rows .hint-row')) {
     const tr_ = el('tr', 'hint-row'), td = el('td', '', t('dash.never_read'));
     td.colSpan = 6; tr_.append(td);
     $('#rows').prepend(tr_);
-  } else if (s.status.round) $('#rows .hint-row')?.remove();
+  } else if (hasData) $('#rows .hint-row')?.remove();
+}
+
+// ---------- nguồn số liệu: Python (collector tự đọc) hoặc Telegraf thật (Docker) ----------
+let switching = false;
+
+function showSource(source) {
+  $('#content').classList.toggle('tg-mode', source === 'telegraf');
+  $('#f-telegraf').hidden = source !== 'telegraf';
+  document.querySelectorAll('#source button').forEach(b => {
+    b.classList.toggle('on', b.dataset.source === source);
+    b.disabled = switching;
+  });
+}
+
+async function setSource(source) {
+  if (switching || (last && last.status.source === source)) return;
+  switching = true;
+  showSource(last ? last.status.source : 'python');
+  $('#lastread').textContent = source === 'telegraf' ? t('dash.tg_starting') : '';
+  try {
+    const res = await fetch('/api/source', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ source }) });
+    const j = await res.json();
+    if (!j.ok) toast(t('dash.failed', { reason: errText(j) }), 'err');
+  } catch (e) {
+    toast(t('dash.status_no_collector'), 'err');
+  }
+  switching = false;
+  load();
 }
 
 function fillAuto() {
@@ -303,7 +353,8 @@ async function load() {
     last = await res.json();
     render();
     await pollFrames();
-    if (last.status.auto) loadTimer = setTimeout(load, Math.max(1, last.status.auto) * 1000);
+    if (last.status.source === 'telegraf') loadTimer = setTimeout(load, 1000);   // Telegraf gửi về liên tục
+    else if (last.status.auto) loadTimer = setTimeout(load, Math.max(1, last.status.auto) * 1000);
   } catch (e) {
     setConn('err', 'dash.status_no_collector');
   }
@@ -377,6 +428,7 @@ async function relinquish(key, priority) {
 
 $('#q').oninput = render;
 $('#read').onclick = readCurrent;
+document.querySelectorAll('#source button').forEach(b => { b.onclick = () => setSource(b.dataset.source); });
 $('#auto').onchange = async () => {
   const interval = Number($('#auto').value);
   const res = await fetch('/api/auto', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -387,7 +439,7 @@ $('#auto').onchange = async () => {
 };
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
-  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); readCurrent(); }
+  if ((e.key === 'r' || e.key === 'R') && !(last && last.status.source === 'telegraf')) { e.preventDefault(); readCurrent(); }
   if (e.key === '/') { e.preventDefault(); $('#q').focus(); }
 });
 window.onhashchange = () => { selected = selectedDevice(); render(); };

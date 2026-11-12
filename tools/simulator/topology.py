@@ -4,7 +4,7 @@ Thiết bị, hệ thống (EPMS / BMS), kết nối và sơ đồ đơn tuyến
 Phần mềm (Edge Site Stack, MQTT, DCIM, ITSM) không phải thông tin thiết bị nên mô tả ở đây, kèm trạng thái
 trong repo này:
   ready    đã có, chạy được với simulator
-  partial  có một phần (ví dụ: cấu hình Telegraf sinh từ Point Map nhưng chưa chạy Telegraf thật)
+  partial  có một phần (ví dụ: cảnh báo tại chỗ mới chạy trong collector mẫu)
   planned  chưa có — vẽ mờ trên sơ đồ, sẽ phát triển
 Thêm một phần mềm mới = thêm một dòng vào EDGE / CENTER (và nhãn topo.part.<id>, topo.note.<id> trong
 i18n/messages.yml); đổi trạng thái khi phần đó được làm.
@@ -17,7 +17,7 @@ STATUSES = ("ready", "partial", "planned")
 # Edge Site Stack: chạy tại container, vẫn chạy khi mất WAN. path: nơi tìm code trong repo.
 EDGE = [
     {"id": "point-map", "status": "ready", "path": "edge/point-map/"},
-    {"id": "telegraf", "status": "partial", "path": "edge/collectors/telegraf/"},
+    {"id": "telegraf", "status": "ready", "path": "edge/collectors/telegraf/"},
     {"id": "bacnet-collector", "status": "ready", "path": "edge/collectors/bacnet/"},
     {"id": "write-service", "status": "ready", "path": "edge/write-service/"},
     {"id": "alerts", "status": "partial", "path": "tools/dashboard/collector.py"},

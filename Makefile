@@ -24,6 +24,7 @@ help:
 	@echo ""
 	@echo "Đọc và ghi (mặc định môi trường lab; ARGS=\"--env site\" để dùng thiết bị thật)"
 	@echo "  make collect       chạy collector, trang http://localhost:8080; đọc khi bấm nút (phím R)"
+	@echo "                     ARGS=\"--source telegraf\": Telegraf thật (Docker telegraf:1.32) đọc Modbus/SNMP, như edge thật"
 	@echo "                     tự tìm thiết bị qua simulator ở SIM_URL (mặc định :5080): make sim hay Docker demo A04"
 	@echo "                     ARGS=\"--interval 2\" để tự đọc mỗi 2 giây như edge chạy thật"
 	@echo "  make once          đọc một lượt rồi thoát"
