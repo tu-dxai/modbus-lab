@@ -28,6 +28,9 @@ Kiểm tra:
     và type integer|gauge32|counter32, chỉ đọc; mỗi thiết bị SNMP/BACnet một địa chỉ riêng
   - BACnet: device_instance không trùng; điểm có object "loại,số" không trùng; chỉ *-value/*-output ghi được,
     và phải có priority 1-16; cần bacnet.client (địa chỉ của edge trên mạng BACnet)
+  - sơ đồ DC (tùy chọn): system của thiết bị thuộc EPMS | BMS; topology.power là cây đơn tuyến — id không trùng,
+    from trỏ tới nút có thật, không vòng, kind hợp lệ, device / meters / show trỏ tới thiết bị và điểm có thật, mỗi
+    thiết bị nằm ở tối đa một nút, nút không gắn thiết bị phải có label; topology.cooling trỏ tới thiết bị và nút có thật
 """
 import re, sys
 from pathlib import Path
@@ -51,6 +54,8 @@ OID = re.compile(r"^\d+(\.\d+)+$")
 BACNET_TYPES = ("analog-input", "analog-output", "analog-value", "binary-input", "binary-output", "binary-value")
 BACNET_WRITABLE = ("analog-output", "analog-value", "binary-output", "binary-value")   # đối tượng commandable
 BACNET_MAX_INSTANCE = 4194302
+SYSTEMS = ("EPMS", "BMS")                          # hệ thống của thiết bị trên sơ đồ DC
+POWER_KINDS = ("grid", "panel", "ups", "battery", "load", "cooling")
 LANGS = ("vi", "ja")                               # ngôn ngữ hiển thị bắt buộc cho label và message
 
 
@@ -141,6 +146,7 @@ def _site_key(d: dict) -> str:
 def _drop_unreachable(cfg: dict, unreachable: dict) -> None:
     """Bỏ thiết bị môi trường báo máy này không tới được (kèm cảnh báo của nó); lý do ghi vào cfg["unreachable"]."""
     keep, dropped = [], {}
+    cfg_devices_before = list(cfg.get("devices", []))
     for d in cfg.get("devices", []):
         if _site_key(d) in unreachable:
             dropped[d.get("name", "?")] = unreachable[_site_key(d)]
@@ -149,6 +155,24 @@ def _drop_unreachable(cfg: dict, unreachable: dict) -> None:
     cfg["devices"] = keep
     cfg["alerts"] = [a for a in cfg.get("alerts", []) if str(a.get("point", "")).split(".")[0] not in dropped]
     cfg["unreachable"] = dropped
+    if dropped and "topology" in cfg:
+        _drop_from_topology(cfg, {d["name"]: d for d in cfg_devices_before if d.get("name") in dropped})
+
+
+def _drop_from_topology(cfg: dict, gone: dict) -> None:
+    """Sơ đồ DC: nút vẫn còn (tủ điện vẫn đó), chỉ gỡ thiết bị đã bỏ; nút mất thiết bị giữ nhãn của thiết bị."""
+    topo = cfg["topology"]
+    for n in topo.get("power", []):
+        if n.get("device") in gone:
+            n.setdefault("label", gone[n["device"]].get("label"))
+            del n["device"]
+        if "meters" in n:
+            n["meters"] = [m for m in n["meters"] if m not in gone]
+        left = {p.get("name") for name in ([n.get("device")] if n.get("device") else []) + n.get("meters", [])
+                for d in cfg["devices"] if d.get("name") == name for p in d.get("points", [])}
+        if "show" in n:
+            n["show"] = [s for s in n["show"] if s in left]
+    topo["cooling"] = [c for c in topo.get("cooling", []) if c.get("device") not in gone]
 
 
 def _apply_environment(cfg: dict, env: str, env_cfg: dict) -> list[str]:
@@ -454,6 +478,8 @@ def validate(cfg: dict) -> list[str]:
     for d in devices:
         dev = d.get("name", "?")
         errors += _check_bilingual(dev, "label", d.get("label"))
+        if "system" in d and d["system"] not in SYSTEMS:
+            errors.append(f"{dev}: system {d['system']!r} không hợp lệ (chỉ nhận {', '.join(SYSTEMS)})")
         proto = protocol(d)
         if proto not in PROTOCOLS:
             errors.append(f"{dev}: protocol {proto!r} không hợp lệ (chỉ nhận {', '.join(PROTOCOLS)})")
@@ -467,12 +493,69 @@ def validate(cfg: dict) -> list[str]:
     errors += _check_shared_addresses([d for d in devices if protocol(d) == "modbus"])
     errors += _check_unique_ip(devices)
     errors += _check_bacnet_site(cfg)
+    errors += _check_topology(cfg)
     keys = {f"{d.get('name')}.{p.get('name')}" for d in devices for p in d.get("points", [])}
     for a in cfg.get("alerts", []):
         point = a.get("point", "?")
         if point not in keys:
             errors.append(f"cảnh báo trỏ tới điểm {point} không có trong Point Map")
         errors += _check_bilingual(f"cảnh báo {point}", "message", a.get("message"))
+    return errors
+
+
+def _check_topology(cfg: dict) -> list[str]:
+    """Mục topology (sơ đồ DC): cây đơn tuyến điện và quan hệ làm mát, trỏ tới thiết bị / điểm có thật."""
+    topo = cfg.get("topology")
+    if topo is None:
+        return []
+    errors: list[str] = []
+    devices = {d.get("name"): d for d in cfg.get("devices", [])}
+    nodes = topo.get("power", [])
+    ids = [n.get("id") for n in nodes]
+    seen_dev: dict[str, str] = {}
+    for i, n in enumerate(nodes):
+        nid = n.get("id") or "?"
+        where = f"topology.power {nid}"
+        if n.get("id") in ids[:i]:
+            errors.append(f"{where}: id trùng")
+        if n.get("kind") not in POWER_KINDS:
+            errors.append(f"{where}: kind {n.get('kind')!r} không hợp lệ (chỉ nhận {', '.join(POWER_KINDS)})")
+        if "from" in n and n["from"] not in ids:
+            errors.append(f"{where}: from trỏ tới nút {n['from']} không có")
+        attached = ([n["device"]] if "device" in n else []) + list(n.get("meters", []))
+        for name in attached:
+            if name not in devices:
+                errors.append(f"{where}: thiết bị {name} không có trong Point Map")
+            elif name in seen_dev:
+                errors.append(f"{where}: thiết bị {name} đã nằm ở nút {seen_dev[name]}")
+            else:
+                seen_dev[name] = nid
+        if "device" not in n:
+            if "label" not in n:
+                errors.append(f"{where}: nút không gắn thiết bị phải có label song ngữ")
+            else:
+                errors += _check_bilingual(where, "label", n["label"])
+        if any(name not in devices for name in attached):
+            continue                                   # đã báo thiết bị không có; không báo thêm show
+        points = {p.get("name") for name in attached for p in devices[name].get("points", [])}
+        for pt in n.get("show", []):
+            if pt not in points:
+                errors.append(f"{where}: show {pt} không phải điểm của {', '.join(attached) or 'nút này'}")
+    parent = {n.get("id"): n.get("from") for n in nodes}
+    in_cycle: set = set()
+    for start in parent:                               # đi ngược lên gốc; gặp lại chính mình = vòng
+        path, cur = [start], parent.get(start)
+        while cur is not None and cur not in path and len(path) <= len(parent):
+            path.append(cur)
+            cur = parent.get(cur)
+        if cur == start and start not in in_cycle:     # mỗi vòng báo một lần
+            in_cycle.update(path)
+            errors.append(f"topology.power: from tạo thành vòng {' -> '.join(path + [start])}")
+    for c in topo.get("cooling", []):
+        if c.get("device") not in devices:
+            errors.append(f"topology.cooling: thiết bị {c.get('device')} không có trong Point Map")
+        if c.get("serves") not in ids:
+            errors.append(f"topology.cooling {c.get('device')}: serves trỏ tới nút {c.get('serves')} không có")
     return errors
 
 

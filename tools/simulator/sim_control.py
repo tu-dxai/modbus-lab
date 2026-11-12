@@ -15,7 +15,8 @@
   POST   /api/power        {"device": "bess-01", "on": false} tắt thiết bị (giả lập mất điện); true để bật lại
   GET    /i18n.json        từ điển song ngữ vi/ja cho trang điều khiển
   GET    /i18n.js          mã song ngữ dùng chung (i18n/i18n.js)
-  GET    /ui.css, /ui.js   giao diện dùng chung (tools/web/)
+  GET    /ui.css, /ui.js   giao diện dùng chung (tools/web/); /diagram.js vẽ sơ đồ DC
+  GET    /api/topology     sơ đồ DC: hệ thống EPMS/BMS, kết nối, edge, trung tâm, đơn tuyến điện (topology.py)
 
 Lỗi trả về gồm error (tiếng Việt), code và params (để trang web dịch theo ngôn ngữ người dùng).
 """
@@ -58,8 +59,11 @@ class Control(BaseHTTPRequestHandler):
             self.reply(200, by_language())
         elif url.path == "/ui.css":
             self.reply(200, (WEB / "ui.css").read_bytes(), "text/css; charset=utf-8")
-        elif url.path == "/ui.js":
-            self.reply(200, (WEB / "ui.js").read_bytes(), "text/javascript; charset=utf-8")
+        elif url.path in ("/ui.js", "/diagram.js"):
+            self.reply(200, (WEB / url.path[1:]).read_bytes(), "text/javascript; charset=utf-8")
+        elif url.path == "/api/topology":
+            from topology import build                 # sơ đồ DC: kiến trúc theo lớp, đơn tuyến điện
+            self.reply(200, build(self.state.cfg))
         elif url.path == "/i18n.js":
             self.reply(200, SCRIPT.read_bytes(), "text/javascript; charset=utf-8")
         elif url.path == "/api/state":

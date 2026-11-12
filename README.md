@@ -5,7 +5,7 @@ kiểm thử đặt và đứng yên tới khi đổi; simulator ghi lại mọi
 "với đầu vào X, client có ghi đúng Y vào đúng thiết bị không". Thiết bị giả nói đủ bốn kiểu kết nối của container:
 **Modbus TCP** (đồng hồ điện sau gateway, pin BESS), **Modbus RTU** qua cổng serial ảo (đồng hồ RS-485), **SNMP**
 (UPS) và **BACnet/IP** (điều hòa CRAH, ghi kèm mức ưu tiên và nhả lệnh). Kèm collector mẫu có trang web, công cụ ghi
-có rào chắn và nhật ký kiểm toán, bộ sinh cấu hình Telegraf từ Point Map, bộ kiểm tra Point Map và 286 bài kiểm thử
+có rào chắn và nhật ký kiểm toán, bộ sinh cấu hình Telegraf từ Point Map, bộ kiểm tra Point Map, sơ đồ DC (EPMS, BMS, edge, DCIM) và 316 bài kiểm thử
 tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng Nhật**.
 
 ## Có gì trong thư mục
@@ -27,6 +27,7 @@ tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng N
 | `edge/write-service/audit.py` | **Nhật ký kiểm toán** lệnh ghi (JSON Lines, chỉ ghi thêm, `var/audit/writes.jsonl`); `make audit` |
 | `tools/simulator/sim.py` | Simulator: mỗi địa chỉ một thiết bị giả — Modbus TCP, Modbus RTU (serial ảo), SNMP agent, BACnet device |
 | `tools/simulator/vserial.py` | Cặp cổng serial ảo (pty) thay cho bus RS-485, không cần socat |
+| `tools/simulator/topology.py`, `tools/web/diagram.js` | **Sơ đồ DC**: kiến trúc theo lớp (EPMS, BMS → edge → DCIM) và đơn tuyến điện, dữ liệu từ Point Map |
 | `tools/simulator/snmp_agent.py`, `bacnet_device.py` | UPS giả (SNMP, UPS-MIB) và CRAH giả (BACnet/IP, mảng ưu tiên 16 mức) |
 | `tools/simulator/sim_state.py` | Giá trị hiện tại của mọi điểm và **nhật ký lệnh ghi** (nhân chứng) |
 | `tools/simulator/sim_control.py`, `control.html` | Kênh điều khiển HTTP và trang web đặt giá trị, xem lệnh ghi (cổng 5080) |
@@ -38,12 +39,12 @@ tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng N
 | `tools/dashboard/collector.html` | Trang web của collector: số liệu theo thiết bị, xu hướng, cảnh báo, nút ghi qua rào chắn |
 | `tools/web/ui.css`, `ui.js` | Giao diện dùng chung cho hai trang: bố cục một màn hình, cột thiết bị, bảng, màu trạng thái |
 | `tests/acceptance/` | 20 bài kiểm thử nghiệm thu, mã MB-xx khớp tài liệu nghiên cứu |
-| `tests/point_map/` | 53 bài kiểm thử bộ kiểm tra Point Map và môi trường, mỗi loại lỗi một bài |
-| `tests/simulator/` | 142 bài kiểm thử simulator: đặt giá trị, tự thay đổi, bật/tắt thiết bị, nhật ký lệnh ghi, khung tin thô (cả SNMP, BACnet), RTU, SNMP, BACnet |
+| `tests/point_map/` | 68 bài kiểm thử bộ kiểm tra Point Map và môi trường, mỗi loại lỗi một bài |
+| `tests/simulator/` | 156 bài kiểm thử simulator: đặt giá trị, tự thay đổi, bật/tắt thiết bị, sơ đồ DC, nhật ký lệnh ghi, khung tin thô (cả SNMP, BACnet), RTU, SNMP, BACnet |
 | `tests/tools/` | 43 bài kiểm thử collector: đọc khi bấm, tự đọc, ghi, nhả lệnh BACnet, khung tin phía client, song ngữ |
 | `tests/telegraf/` | 9 bài kiểm thử cấu hình Telegraf sinh ra (chỉ kiểm cấu trúc, chưa chạy Telegraf thật) |
 | `tests/write_service/` | 8 bài kiểm thử nhật ký kiểm toán: ghi được, bị chặn, bị từ chối, ghi từ web |
-| `tests/translations/` | 11 bài kiểm thử từ điển: đủ vi và ja, khớp tham số, mọi khóa trang web và code dùng đều có |
+| `tests/translations/` | 12 bài kiểm thử từ điển: đủ vi và ja, khớp tham số, mọi khóa trang web và code dùng đều có |
 | `tests/conftest.py` | Bật simulator kiểm thử (môi trường lab, cổng 5021), dùng chung cho mọi bài |
 
 Các module import nhau theo tên ngắn (`codec`, `sim`, `sim_state`, `simctl`, `collector`, `write`, `audit`, `point_map`, `modbus_io`, `snmp_io`, `bacnet_io`, `generate`, `i18n`). Nơi tìm module khai báo trong
@@ -196,6 +197,38 @@ Mọi lệnh ghi — từ `make write` (`cli:<user>`) hay từ trang collector (
 ```bash
 make test
 ```
+
+## Sơ đồ DC (BMS, EPMS, edge, DCIM)
+
+Data center cần điện, làm mát, và người vận hành biết chuyện gì đang xảy ra. Mỗi hệ thống lo một phần:
+
+| Hệ thống | Là gì | Trả lời câu hỏi | Trong lab này |
+|---|---|---|---|
+| **EPMS** — Electrical Power Monitoring System | Giám sát điện năng ở mọi chặng: lưới vào, tủ phân phối, UPS, pin, tới rack | Điện có đủ, ổn định, còn dự phòng bao lâu? | 3 đồng hồ điện, BESS, UPS |
+| **BMS** — Building Management System | Quản lý tòa nhà: điều hòa, nhiệt độ, độ ẩm, quạt. Khác EPMS: thường **ra lệnh** cho thiết bị, không chỉ đo; hay dùng BACnet | Rack có đủ mát không? | Điều hòa CRAH 01 |
+| **Edge** | Máy tính trong container: đọc mọi thiết bị, cảnh báo tại chỗ, ghi qua rào chắn, gửi lên trung tâm; vẫn chạy khi mất WAN | Container này đang ra sao, kể cả khi mất mạng? | Point Map, Telegraf, collector BACnet, write-service |
+| **DCIM** — Data Center Infrastructure Management | Gom EPMS, BMS (và thiết bị IT) của mọi container về một nơi: giám sát, cảnh báo, công suất, PUE | Toàn bộ hạ tầng đang ra sao? | Chưa có (Rails + Nuxt, AWS Tokyo) |
+| **ITSM** — IT Service Management | Quy trình vận hành: sự cố, yêu cầu, thay đổi, có phiếu và người chịu trách nhiệm | Ai xử lý, tới đâu rồi? | Chưa có |
+
+Trên trang, nút **EPMS, BMS, DCIM… là gì?** ở đầu mỗi tab sơ đồ mở phần giải thích đầy đủ (kèm UPS, BESS, CRAH,
+tủ phân phối / PDU, sơ đồ đơn tuyến).
+
+Trang simulator (`http://localhost:5080`) có ba tab: **Thiết bị** (bảng đặt giá trị), **Sơ đồ kiến trúc**,
+**Sơ đồ đơn tuyến**. Hai sơ đồ cập nhật mỗi giây: giá trị, thiết bị bật / tắt; bấm một thiết bị để mở nó ở tab bảng.
+
+- **Sơ đồ kiến trúc** — dữ liệu đi từ đâu tới đâu: thiết bị hiện trường nhóm theo hệ thống (**EPMS** quản lý điện
+  năng: đồng hồ, BESS, UPS · **BMS** quản lý tòa nhà / làm mát: CRAH) → kết nối (gateway, RS-485, IP riêng, SNMP,
+  BACnet) → **Edge Site Stack** (Point Map, Telegraf, collector BACnet, write-service, cảnh báo tại chỗ) →
+  MQTT TLS → trung tâm (**DCIM**, **ITSM**). Mỗi phần mềm có nhãn **Đã có / Một phần / Chưa có**; phần chưa có
+  (MQTT, DCIM, ITSM) vẽ nét đứt, mờ.
+- **Sơ đồ đơn tuyến** — đường cấp điện: lưới → tủ phân phối chính → BESS / UPS / tủ phụ → tủ rack → dãy rack GPU,
+  kèm đồng hồ đo tại từng tủ và đường làm mát của CRAH. **Đây là sơ đồ GIẢ ĐỊNH** (trang hiện cảnh báo), vì chưa có
+  bản vẽ điện thật của site.
+
+Dữ liệu sơ đồ lấy từ Point Map (`system:` trên từng thiết bị, mục `topology:` ở cuối `devices.yml`) và bộ kiểm tra
+Point Map bắt lỗi: trỏ tới thiết bị / nút không có, trùng id, vòng cấp điện. Có bản vẽ đơn tuyến thật thì sửa mục
+`topology.power` theo bản vẽ rồi đổi `assumed: false`. Phần mềm và trạng thái của chúng nằm ở
+`tools/simulator/topology.py` — khi làm xong MQTT / DCIM / ITSM thì đổi trạng thái ở đó. API: `GET /api/topology`.
 
 ## Modbus RTU, SNMP, BACnet
 
@@ -357,6 +390,7 @@ Demo A04 dùng cách này để bus RS-485 của simulator trong Docker đọc �
 | Point Map | Ô nhớ đè nhau (tính cả kiểu 32 bit chiếm 2 ô), byte_order sai, type sai, điểm ghi được thiếu giới hạn, thiếu unit, thiếu trường bắt buộc; host/port/device_id/timeout sai; trùng device_id hoặc khác timeout sau cùng gateway; file môi trường thiếu, thừa, trùng địa chỉ; simulator và collector từ chối khởi động |
 | Mạng | Gateway phục vụ nhiều thiết bị theo device_id; cùng device_id ở hai địa chỉ là hai thiết bị; thiết bị cùng gateway dùng chung kết nối; một địa chỉ mất kết nối không ảnh hưởng địa chỉ khác |
 | Simulator | Giá trị đứng yên; đặt giá trị rồi đọc lại qua Modbus đúng kiểu, byte order, hệ số; đặt sai thì không đổi gì; nhật ký ghi lại lệnh được nhận, lệnh vào ô chỉ đọc, ô không khai báo, sai device_id; chờ lệnh ghi; dòng lệnh |
+| Sơ đồ DC | Mọi thiết bị thuộc EPMS / BMS; nhóm theo hệ thống và kiểu kết nối; phần mềm có trạng thái; nút đơn tuyến lấy nhãn và điểm theo thiết bị; Point Map báo lỗi trỏ sai, trùng id, vòng cấp điện; thiết bị không tới được bị gỡ khỏi sơ đồ nhưng nút vẫn còn; `GET /api/topology` |
 | Bật / tắt | Thiết bị IP riêng từ chối kết nối và cắt kết nối đang mở; sau gateway trả 0B, không thực thi lệnh ghi, thiết bị cùng gateway vẫn chạy; RS-485 / SNMP / BACnet im lặng; đặt lại bật lại tất cả; collector bỏ qua phần còn lại của thiết bị không trả lời và không sập khi gặp mã lỗi Modbus |
 | web | Trang chính, `GET /api/points`, ghi qua `POST /api/write`: hợp lệ, bị rào chắn chặn (kèm mã lỗi để dịch), yêu cầu sai dạng; `/i18n.json`, `/i18n.js`, `?lang=` |
 | Khung tin | Tách trường đúng byte trên đường truyền (FC03/04/06/16, lỗi, khung hỏng); ghép hỏi/đáp; giải nghĩa byte order, số âm, float; lọc, xóa, giới hạn số cặp; dòng lệnh |
@@ -411,6 +445,10 @@ không thừa, không hai địa chỉ trỏ chung một chỗ.
 - Mỗi điểm có `name`, `table` (`holding` hoặc `input`), `address`, `type` (`int16`, `uint16`, `int32`, `uint32`, `float32`) và `unit` (để `""` nếu không có đơn vị).
 - Hai điểm cùng thiết bị, cùng bảng không được đè ô nhớ của nhau; kiểu 32 bit chiếm 2 ô liền nhau.
 - Điểm `writable: true` phải có `allowed: [...]`, hoặc có đủ `min` và `max` (min ≤ max). Rào chắn ghi chặn mọi giá trị ngoài giới hạn đó.
+- **Sơ đồ DC (tùy chọn):** `system:` là `EPMS` hoặc `BMS`. `topology.power`: mỗi nút có `id` không trùng, `kind`
+  (`grid`, `panel`, `ups`, `battery`, `load`, `cooling`), `from` trỏ tới nút có thật và không tạo vòng; `device` / `meters`
+  trỏ tới thiết bị có thật, mỗi thiết bị ở tối đa một nút; `show` là điểm của thiết bị đó; nút không gắn thiết bị
+  phải có `label` song ngữ. `topology.cooling`: `device` có thật, `serves` là nút có thật.
 - **RTU:** `transport: rtu`, `serial: { port, baudrate, parity, stop_bits }`, `device_id` 1–247; thiết bị cùng cổng
   serial phải cùng tham số. File môi trường ánh xạ cổng serial ở mục `serial`.
 - **SNMP:** `protocol: snmp`, `snmp: { version: "1" | "2c", community }`; mỗi điểm có `oid` (không trùng), `type`

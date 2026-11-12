@@ -155,6 +155,16 @@ const ICONS = {
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z M20 20l-4.2-4.2',
   undo: 'M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 0 12h-3',
   power: 'M12 3v8 M7.05 6.05a7 7 0 1 0 9.9 0',
+  // sơ đồ DC
+  bolt: 'M13 3L5 13h6l-1 8 8-10h-6l1-8z',
+  panel: 'M5 3h14v18H5z M9 7h6 M9 11h6 M9 15h6',
+  ups: 'M4 5h16v14H4z M4 15h16 M10 8l-2 3h4l-2 3',
+  battery: 'M3 8h15v8H3z M18 11h3v2h-3 M6 11v2 M9 11v2 M12 11v2',
+  rack: 'M5 3h14v18H5z M5 8h14 M5 13h14 M8 5.5h.01 M8 10.5h.01 M8 15.5h.01',
+  fan: 'M12 3v18 M4.2 7.5l15.6 9 M4.2 16.5l15.6-9 M10 4.5l2 2 2-2 M10 19.5l2-2 2 2',
+  server: 'M4 4h16v7H4z M4 13h16v7H4z M8 7.5h.01 M8 16.5h.01',
+  cloud: 'M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 9.6 4.2 4.2 0 0 0 7 18z',
+  plug: 'M9 3v5 M15 3v5 M7 8h10v3a5 5 0 0 1-10 0z M12 16v5',
 };
 
 function icon(name, cls) {
@@ -254,6 +264,12 @@ function initShell(page) {
     if (e.key === '[') { e.preventDefault(); setSide(!app.classList.contains('side-hidden')); }
   });
   help._close = closeHelp;
+  // Mở hướng dẫn và cuộn tới một phần (ví dụ 'help-systems' từ nút "EPMS, BMS… là gì?" trên sơ đồ).
+  window.openHelpAt = (id) => {
+    openHelp();
+    const target = id && document.getElementById(id);
+    if (target) target.scrollIntoView({ block: 'start' });
+  };
   let seen = false;
   try { seen = localStorage.getItem(keyHelp) === '1'; } catch (e) { seen = true; }
   if (!seen) openHelp();
@@ -274,8 +290,15 @@ function renderHelp(page) {
   for (const k of ['hr', 'ir', 'fc', 'unit', 'order', 'scale', 'gateway', 'oid', 'priority']) {
     terms.append(el('dt', '', t(`help.term_${k}`)), el('dd', '', t(`help.def_${k}`)));
   }
+  // Hệ thống trong data center: cho người mới, trước khi đọc sơ đồ hay thuật ngữ giao thức.
+  const systems = el('dl', 'terms');
+  for (const k of ['epms', 'bms', 'dcim', 'itsm', 'edge', 'ups', 'bess', 'crah', 'pdu', 'single_line']) {
+    systems.append(el('dt', '', t(`help.sys_term_${k}`)), el('dd', '', t(`help.sys_def_${k}`)));
+  }
+  const sys = section('help.systems', el('p', 'muted', t('help.systems_intro')), systems);
+  sys.id = 'help-systems';
   $('#help h2').textContent = t(`help.${page}_title`);
-  box.replaceChildren(el('p', 'intro', t(`help.${page}_intro`)), section('help.steps', steps),
+  box.replaceChildren(el('p', 'intro', t(`help.${page}_intro`)), section('help.steps', steps), sys,
                       section('help.terms', terms), section('help.keys', el('p', 'keys', t(`help.${page}_keys`))));
 }
 

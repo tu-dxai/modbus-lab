@@ -10,6 +10,7 @@
   .reg { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
   .lim { color: var(--muted); font-size: 12px; white-space: nowrap; }
   td.value-col { width: 1%; white-space: nowrap; }
+  .diagram-mode .table-only { display: none !important; }
 </style>
 </head>
 <body>
@@ -30,17 +31,23 @@
     </aside>
     <section id="content" class="content">
       <!-- đặt giá trị cho thiết bị giả; lệnh client gửi tới xem ở khung tin trang collector (hoặc make writes) -->
-      <div class="panel card" style="flex: 1">
+      <div id="panel" class="panel card" style="flex: 1">
         <div class="panel-head">
+          <div id="views" class="seg">
+            <button data-view="table" data-icon="panel"><span data-i18n="simui.view_table"></span></button>
+            <button data-view="arch" data-icon="server"><span data-i18n="simui.view_arch"></span></button>
+            <button data-view="power" data-icon="bolt"><span data-i18n="simui.view_power"></span></button>
+          </div>
           <h2 id="title"></h2><span id="sub" class="sub"></span>
           <div class="tools">
-            <span id="power-slot"></span>
-            <span class="small muted hide-sm" data-i18n="simui.set_hint"></span>
+            <span id="power-slot" class="table-only"></span>
+            <span class="small muted hide-sm table-only" data-i18n="simui.set_hint"></span>
             <label class="chk small" data-i18n-title="simui.auto_hint"><span data-i18n="simui.auto"></span>
               <select id="auto" class="field"></select></label>
           </div>
         </div>
-        <div class="scroll">
+        <div id="diagram" class="dg-wrap" hidden></div>
+        <div id="table-view" class="scroll">
           <table class="grid">
             <thead><tr>
               <th data-i18n="ui.col_point"></th>
@@ -65,6 +72,7 @@
 
 <script src="/i18n.js"></script>
 <script src="/ui.js"></script>
+<script src="/diagram.js"></script>
 <script>
 let points = null, auto = 0, connState = ['ok', 'simui.connecting'];
 const AUTO_CHOICES = [0, 5, 10, 30];
@@ -215,7 +223,7 @@ function sidebar() {
     allMeta: t('ui.n_points', { n: Object.keys(points || {}).length }),
     itemMeta: d => deviceOn(d.name) ? deviceShort(d.meta) : t('simui.off_short'),
     itemDot: d => deviceOn(d.name) ? 'ok' : 'idle',
-    onSelect: name => { selected = name; selectDevice(name); renderPoints(); },
+    onSelect: name => openDevice(name),
   });
 }
 
@@ -231,8 +239,45 @@ function updateValues() {
   lastValues = Object.fromEntries(Object.entries(points).map(([k, p]) => [k, p.value]));
 }
 
+// ---------- tab: bảng thiết bị / sơ đồ kiến trúc / sơ đồ đơn tuyến ----------
+let view = (() => { try { return localStorage.getItem('simView') || 'table'; } catch (e) { return 'table'; } })();
+let topo = null, diagramShape = '';
+
+async function showView(v) {
+  view = ['table', 'arch', 'power'].includes(v) ? v : 'table';
+  try { localStorage.setItem('simView', view); } catch (e) { /* trình duyệt chặn lưu: không sao */ }
+  document.querySelectorAll('#views button').forEach(b => b.classList.toggle('on', b.dataset.view === view));
+  $('#panel').classList.toggle('diagram-mode', view !== 'table');
+  $('#table-view').hidden = view !== 'table';
+  $('#diagram').hidden = view === 'table';
+  if (view !== 'table' && !topo) {
+    try { topo = await api('GET', '/api/topology'); } catch (e) { $('#diagram').textContent = e.message; }
+  }
+  built = ''; diagramShape = '';
+  renderPoints();
+}
+
+function openDevice(name) {
+  selected = name;
+  selectDevice(name);
+  if (view !== 'table') showView('table'); else renderPoints();
+}
+
+function renderDiagram() {
+  if (!topo) return;
+  const off = Object.values(points).filter(p => p.on === false).map(p => p.device);
+  const shape = JSON.stringify([I18N.lang, view, Object.keys(points), off]);
+  if (shape === diagramShape) return updateDiagram(points);
+  diagramShape = shape;
+  $('#title').textContent = t(view === 'arch' ? 'simui.view_arch' : 'simui.view_power');
+  $('#sub').textContent = t(view === 'arch' ? 'simui.arch_sub' : 'simui.power_sub');
+  (view === 'arch' ? renderArchitecture : renderPowerLine)($('#diagram'), topo, points);
+  sidebar();
+}
+
 function renderPoints() {
   if (!points) return;
+  if (view !== 'table') return renderDiagram();
   if (selected !== ALL && !devices.has(selected)) selected = ALL;
   const off = Object.values(points).filter(p => p.on === false).map(p => p.device);   // bật/tắt: dựng lại bảng
   const shape = JSON.stringify([I18N.lang, selected, $('#q').value, Object.keys(points), off]);
@@ -291,6 +336,18 @@ document.addEventListener('keydown', (e) => {          // phím /: tìm thiết 
   $('#q').focus();
 });
 
+document.querySelectorAll('#views button').forEach(b => { b.onclick = () => showView(b.dataset.view); });
+initDiagram({
+  deviceLabel: deviceName,
+  onOpen: openDevice,
+  onPower: async (name, on) => {
+    try { await api('POST', '/api/power', { device: name, on }); } catch (e) { alert(e.message); }
+    refresh();
+  },
+  powerTitle: (name, off) => off ? t('simui.turn_on_hint')
+    : t('simui.turn_off_hint', { effect: devices.has(name) ? offEffect(devices.get(name)) : '' }),
+});
+
 initI18n(() => {
   document.title = t('simui.title');
   setConn(...connState);
@@ -300,6 +357,7 @@ initI18n(() => {
 }).then(() => {
   initShell('sim');
   fillAuto();
+  showView(view);
   document.title = t('simui.title');
   refresh();
   setInterval(refresh, 1000);

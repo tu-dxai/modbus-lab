@@ -24,6 +24,7 @@ bacnet: { client: "10.20.0.5/24:47808" }
 devices:
   - name: dong-ho-dien-01          # đồng hồ điện tủ phân phối, sau gateway RS-485
     label: { vi: "Đồng hồ điện tủ phân phối 01", ja: "分電盤 電力計 01" }
+    system: EPMS                   # EPMS: hệ thống quản lý điện năng
     host: 10.20.0.21               # IP của gateway (thiết bị RS-485 không có IP riêng)
     port: 502                      # cổng chuẩn Modbus TCP
     device_id: 1                   # địa chỉ RTU trên bus — tra màn hình cài đặt thiết bị
@@ -41,6 +42,7 @@ devices:
 
   - name: dong-ho-dien-02          # đồng hồ điện thứ hai, cùng bus RS-485 với dong-ho-dien-01
     label: { vi: "Đồng hồ điện tủ phân phối 02", ja: "分電盤 電力計 02" }
+    system: EPMS                   # EPMS: hệ thống quản lý điện năng
     host: 10.20.0.21
     port: 502
     device_id: 2
@@ -58,6 +60,7 @@ devices:
 
   - name: dong-ho-rs485-03         # đồng hồ nối thẳng RS-485 vào edge (cổng USB-RS485), không qua gateway
     label: { vi: "Đồng hồ điện tủ phụ 03 (RS-485)", ja: "副分電盤 電力計 03（RS-485）" }
+    system: EPMS                   # EPMS: hệ thống quản lý điện năng
     transport: rtu                 # Modbus RTU trên cổng serial; không có host/port
     serial: { port: /dev/ttyUSB0, baudrate: 9600, parity: N, stop_bits: 1 }   # tra màn hình cài đặt thiết bị
     device_id: 3                   # địa chỉ RTU trên bus, 1-247
@@ -76,6 +79,7 @@ devices:
 
   - name: bess-01                  # pin lưu trữ, có cổng Ethernet riêng; hãng này đảo thứ tự word
     label: { vi: "Hệ thống pin lưu trữ 01", ja: "蓄電システム 01" }
+    system: EPMS                   # EPMS: hệ thống quản lý điện năng
     host: 10.20.0.30
     port: 502
     device_id: 1                   # thiết bị TCP trực tiếp thường dùng 1 (hoặc 255)
@@ -92,6 +96,7 @@ devices:
 
   - name: ups-01                   # UPS có card mạng SNMP; OID theo UPS-MIB chuẩn (RFC 1628)
     label: { vi: "UPS 01", ja: "UPS 01" }
+    system: EPMS                   # EPMS: hệ thống quản lý điện năng
     protocol: snmp                 # đọc bằng SNMP GET (Telegraf inputs.snmp ở edge); chỉ đọc
     host: 10.20.0.40
     port: 161                      # cổng chuẩn SNMP (UDP)
@@ -116,6 +121,7 @@ devices:
 
   - name: crah-01                  # điều hòa chính xác (CRAH) của dãy rack, BACnet/IP
     label: { vi: "Điều hòa CRAH 01", ja: "空調機 CRAH 01" }
+    system: BMS                    # BMS: hệ thống quản lý tòa nhà (làm mát)
     protocol: bacnet               # collector Python đọc/ghi (Telegraf không đọc BACnet)
     host: 10.20.0.50
     port: 47808                    # cổng chuẩn BACnet/IP (UDP, 0xBAC0)
@@ -136,6 +142,35 @@ devices:
       - { name: lenh_chay,      label: { vi: "Lệnh chạy (1) / dừng (0)", ja: "運転（1）／停止（0）指令" },
           object: "binary-value,1", unit: "", writable: true, allowed: [0, 1], priority: 8,
           sim: { base: 1 } }
+
+# =============================================================
+#  SƠ ĐỒ DC — tab "Sơ đồ kiến trúc" và "Sơ đồ đơn tuyến" trên trang simulator. Không ảnh hưởng đọc / ghi.
+#  system (trên từng thiết bị): EPMS = quản lý điện năng, BMS = quản lý tòa nhà / làm mát.
+#  power: sơ đồ đơn tuyến, mỗi nút một phần tử; from = nút cấp điện cho nó (nút gốc không có from)
+#    kind:   grid (lưới) | panel (tủ điện) | ups | battery (pin lưu trữ) | load (tải) | cooling (làm mát)
+#    device: thiết bị trong Point Map chính là nút này (nhãn lấy theo thiết bị)
+#    meters: đồng hồ đo tại nút này (tủ điện); show: điểm hiện trên sơ đồ (mặc định 2 điểm đầu)
+#  cooling: thiết bị làm mát -> nút được làm mát
+#
+#  GIẢ ĐỊNH (assumed: true) — CHƯA có bản vẽ điện thật của site. Sửa theo bản vẽ đơn tuyến của site,
+#  rồi đổi assumed: false. Trang sơ đồ hiện cảnh báo "giả định" cho tới khi đó.
+# =============================================================
+topology:
+  assumed: true
+  power:
+    - { id: luoi, kind: grid, label: { vi: "Lưới điện (trạm biến áp)", ja: "商用電源（受変電）" } }
+    - { id: tu-chinh, kind: panel, from: luoi, meters: [dong-ho-dien-01], show: [dien_ap, cong_suat],
+        label: { vi: "Tủ phân phối chính (MDB)", ja: "主配電盤（MDB）" } }
+    - { id: bess-01, kind: battery, device: bess-01, from: tu-chinh, show: [muc_pin, che_do] }
+    - { id: ups-01, kind: ups, device: ups-01, from: tu-chinh, show: [tai_ra, nguon_ra] }
+    - { id: tu-rack, kind: panel, from: ups-01, meters: [dong-ho-dien-02], show: [cong_suat],
+        label: { vi: "Tủ phân phối rack (PDU)", ja: "ラック分電盤（PDU）" } }
+    - { id: day-rack, kind: load, from: tu-rack, label: { vi: "Dãy rack GPU", ja: "GPU ラック列" } }
+    - { id: tu-phu, kind: panel, from: tu-chinh, meters: [dong-ho-rs485-03], show: [dien_ap, dong_dien],
+        label: { vi: "Tủ phụ cơ điện (làm mát)", ja: "動力副分電盤（空調）" } }
+    - { id: crah-01, kind: cooling, device: crah-01, from: tu-phu, show: [nhiet_do_cap, trang_thai_quat] }
+  cooling:
+    - { device: crah-01, serves: day-rack }
 
 alerts:
   - { point: dong-ho-dien-01.nhiet_do_tu, above: 30.0,

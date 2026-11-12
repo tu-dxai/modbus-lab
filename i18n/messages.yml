@@ -328,7 +328,40 @@ ui.ir_title:             { vi: "IR = Input Register: thanh ghi chỉ đọc, th�
 
 # ---------- khung hướng dẫn cho người mới (nút ?, tự hiện lần đầu mở trang) ----------
 help.steps:              { vi: "Thao tác",            ja: "操作手順" }
-help.terms:              { vi: "Thuật ngữ",           ja: "用語" }
+help.terms:              { vi: "Thuật ngữ Modbus, SNMP, BACnet", ja: "Modbus・SNMP・BACnet の用語" }
+help.systems:            { vi: "Các hệ thống trong data center", ja: "データセンターのシステム" }
+help.systems_intro:      { vi: "Data center cần ba thứ để máy chủ chạy: điện, làm mát, và người vận hành biết chuyện gì đang xảy ra. Mỗi hệ thống dưới đây lo một phần; tab Sơ đồ kiến trúc cho thấy chúng nối với nhau thế nào.",
+                           ja: "サーバーを動かすには、電力・冷却、そして運用者が状況を把握できることの 3 つが必要です。以下の各システムがその一部を担い、アーキテクチャ図でつながりを確認できます。" }
+help.sys_term_epms:      { vi: "EPMS",                ja: "EPMS" }
+help.sys_def_epms:       { vi: "Electrical Power Monitoring System — hệ thống giám sát điện năng. Đo điện ở mọi chặng: lưới vào, tủ phân phối, UPS, pin, tới từng rack (điện áp, dòng, công suất, điện năng, chất lượng điện). Trả lời: điện có đủ, ổn định, còn dự phòng bao lâu? Trong lab: 3 đồng hồ điện, BESS, UPS.",
+                           ja: "Electrical Power Monitoring System — 電力監視システム。受電・分電盤・UPS・蓄電池から各ラックまで、各段階の電力（電圧・電流・電力・電力量・電力品質）を計測します。電力は足りているか、安定しているか、バックアップはあとどれくらいか？ ラボでは電力計 3 台、BESS、UPS。" }
+help.sys_term_bms:       { vi: "BMS",                 ja: "BMS" }
+help.sys_def_bms:        { vi: "Building Management System — hệ thống quản lý tòa nhà. Điều khiển và theo dõi môi trường: điều hòa, nhiệt độ, độ ẩm, quạt (tòa nhà lớn còn có chiếu sáng, báo cháy, ra vào). Khác EPMS ở chỗ BMS thường ra lệnh cho thiết bị, không chỉ đo. Thường nói BACnet. Trong lab: điều hòa CRAH 01.",
+                           ja: "Building Management System — ビル管理システム。空調・温度・湿度・ファンなどの環境を制御・監視します（大規模ビルでは照明・火災報知・入退室も）。EPMS と違い、計測だけでなく機器へ指令を出すのが普通です。多くは BACnet を使います。ラボでは空調機 CRAH 01。" }
+help.sys_term_dcim:      { vi: "DCIM",                ja: "DCIM" }
+help.sys_def_dcim:       { vi: "Data Center Infrastructure Management — phần mềm gom số liệu EPMS, BMS (và thiết bị IT) của mọi container về một nơi: giám sát, cảnh báo, công suất còn trống, hiệu suất năng lượng (PUE). Dự án này: Rails + Nuxt trên AWS Tokyo — chưa có trong repo.",
+                           ja: "Data Center Infrastructure Management — 全コンテナの EPMS・BMS（と IT 機器）のデータを 1 か所に集め、監視・アラート・空き容量・エネルギー効率（PUE）を扱うソフトウェア。本プロジェクトでは AWS 東京の Rails + Nuxt — リポジトリにはまだありません。" }
+help.sys_term_itsm:      { vi: "ITSM",                ja: "ITSM" }
+help.sys_def_itsm:       { vi: "IT Service Management — quy trình vận hành: sự cố (incident), yêu cầu, thay đổi, có phiếu (ticket) và người chịu trách nhiệm. Cảnh báo từ DCIM thành phiếu giao cho người trực. Chưa có trong repo.",
+                           ja: "IT Service Management — インシデント・要求・変更をチケットと担当者で管理する運用プロセス。DCIM のアラートがチケットになり当番者に割り当てられます。リポジトリにはまだありません。" }
+help.sys_term_edge:      { vi: "Edge",                ja: "エッジ" }
+help.sys_def_edge:       { vi: "Máy tính đặt ngay trong container: đọc mọi thiết bị (Telegraf, collector BACnet), cảnh báo tại chỗ, ghi lệnh qua rào chắn, rồi gửi lên DCIM qua MQTT. Vẫn chạy khi mất mạng ra ngoài (WAN), nên an toàn không phụ thuộc trung tâm.",
+                           ja: "コンテナ内に置くコンピューター。全機器を読み取り（Telegraf、BACnet コレクター）、現地でアラートを出し、ガード経由で指令を書き込み、MQTT で DCIM へ送ります。WAN が切れても動作するため、安全性は中央に依存しません。" }
+help.sys_term_ups:       { vi: "UPS",                 ja: "UPS" }
+help.sys_def_ups:        { vi: "Bộ lưu điện: mất điện lưới thì cấp điện từ ắc quy ngay lập tức, không gián đoạn, đủ thời gian để máy phát hoặc BESS vào thay. Nguồn ra = 5 nghĩa là UPS đang chạy bằng pin.",
+                           ja: "無停電電源装置：商用電源が途絶えると瞬時にバッテリーから給電し、発電機や BESS へ切り替える時間を稼ぎます。出力電源 = 5 はバッテリー運転中を意味します。" }
+help.sys_term_bess:      { vi: "BESS",                ja: "BESS" }
+help.sys_def_bess:       { vi: "Battery Energy Storage System — hệ pin lưu trữ lớn: sạc khi điện rẻ, xả khi thiếu điện hoặc giờ cao điểm, dự phòng dài hơn UPS. Mức pin (SOC) tính bằng %.",
+                           ja: "Battery Energy Storage System — 大型蓄電システム：電力が安いときに充電し、不足時やピーク時に放電。UPS より長時間のバックアップ。充電率（SOC）は %。" }
+help.sys_term_crah:      { vi: "CRAH",                ja: "CRAH" }
+help.sys_def_crah:       { vi: "Computer Room Air Handler — điều hòa chính xác cho phòng máy: thổi gió lạnh vào mặt trước rack, hút gió nóng phía sau. Nhiệt độ gió cấp nên dưới 27 °C (khuyến nghị ASHRAE).",
+                           ja: "Computer Room Air Handler — サーバールーム用の精密空調：ラック前面に冷気を送り、背面の暖気を吸い込みます。給気温度は 27 °C 未満が推奨（ASHRAE）。" }
+help.sys_term_pdu:       { vi: "Tủ phân phối / PDU",  ja: "分電盤／PDU" }
+help.sys_def_pdu:        { vi: "Tủ chia điện ra nhiều nhánh, có aptomat bảo vệ. PDU (Power Distribution Unit) là tủ hoặc thanh cấp điện tới từng rack. Đồng hồ điện gắn ở tủ để đo nhánh đó.",
+                           ja: "電力を複数の系統に分け、ブレーカーで保護する盤。PDU（Power Distribution Unit）は各ラックへ給電する盤またはタップ。盤に付けた電力計でその系統を計測します。" }
+help.sys_term_single_line: { vi: "Sơ đồ đơn tuyến",   ja: "単線結線図" }
+help.sys_def_single_line: { vi: "Bản vẽ đường điện, mỗi đường dây vẽ bằng một nét: điện đi từ đâu, qua tủ nào, tới tải nào. Dùng để biết mất một phần tử thì những gì bị ảnh hưởng. Bản trong lab là giả định.",
+                           ja: "各配線を 1 本の線で描いた電気系統図：電力がどこから、どの盤を通り、どの負荷へ行くか。ある機器が止まると何が影響を受けるかを知るために使います。ラボの図は仮定です。" }
 help.keys:               { vi: "Phím tắt",            ja: "ショートカット" }
 help.sim_title:          { vi: "Hướng dẫn nhanh — Simulator", ja: "クイックガイド — シミュレーター" }
 help.sim_intro:          { vi: "Trang này là thiết bị giả. Bạn quyết định thiết bị báo giá trị gì; client (trang collector hoặc dự án edge của bạn) đọc qua Modbus sẽ thấy đúng giá trị đó.",
@@ -383,3 +416,78 @@ help.def_priority:       { vi: "Điều hòa, BMS dùng BACnet/IP (UDP 47808). L
 help.term_gateway:       { vi: "Gateway",             ja: "ゲートウェイ" }
 help.def_gateway:        { vi: "Thiết bị chuyển Modbus TCP sang RS-485. Nhiều thiết bị phía sau dùng chung một địa chỉ IP, phân biệt bằng Unit ID.",
                            ja: "Modbus TCP を RS-485 に変換する機器。配下の複数機器は同じ IP を共有し、Unit ID で区別します。" }
+
+# ---------- sơ đồ DC (tools/web/diagram.js, tools/simulator/topology.py) ----------
+simui.view_table:        { vi: "Thiết bị",           ja: "機器" }
+simui.view_arch:         { vi: "Sơ đồ kiến trúc",    ja: "アーキテクチャ図" }
+simui.view_power:        { vi: "Sơ đồ đơn tuyến",    ja: "単線結線図" }
+simui.arch_sub:          { vi: "dữ liệu đi từ thiết bị hiện trường qua edge tới trung tâm",
+                           ja: "現場機器からエッジを経て中央へ流れるデータ" }
+simui.power_sub:         { vi: "đường cấp điện và làm mát; bấm thiết bị để đặt giá trị",
+                           ja: "給電経路と空調。機器をクリックすると値を設定できます" }
+topo.col.field:          { vi: "Thiết bị hiện trường", ja: "現場機器" }
+topo.col.links:          { vi: "Kết nối",            ja: "接続" }
+topo.col.edge:           { vi: "Edge Site Stack · {site}", ja: "エッジ・サイトスタック · {site}" }
+topo.col.uplink:         { vi: "Đường lên trung tâm", ja: "中央への上り回線" }
+topo.col.center:         { vi: "Trung tâm · AWS Tokyo", ja: "中央 · AWS 東京" }
+topo.system.epms:        { vi: "Electrical Power Monitoring System — giám sát điện năng",
+                           ja: "Electrical Power Monitoring System — 電力監視システム" }
+topo.system.bms:         { vi: "Building Management System — quản lý tòa nhà",
+                           ja: "Building Management System — ビル管理システム" }
+topo.system_desc.epms:   { vi: "Theo dõi điện từ lưới qua tủ phân phối, UPS, pin tới rack. Trả lời: điện có đủ, ổn định, còn dự phòng bao lâu?",
+                           ja: "商用電源から分電盤・UPS・蓄電池を経てラックまでの電力を監視。電力は足りているか、安定しているか、バックアップはあとどれくらいか？" }
+topo.system_desc.bms:    { vi: "Điều khiển môi trường quanh thiết bị IT: làm mát, nhiệt độ, độ ẩm. Trả lời: rack có đủ mát không? Ra lệnh được (điểm đặt nhiệt độ, chạy / dừng).",
+                           ja: "IT 機器周りの環境（冷却・温度・湿度）を制御。ラックは十分に冷えているか？指令も可能（温度設定値、運転／停止）。" }
+topo.system_desc.other:  { vi: "Thiết bị chưa khai system trong Point Map", ja: "Point Map に system が未設定の機器" }
+topo.glossary_link:      { vi: "EPMS, BMS, DCIM… là gì?", ja: "EPMS、BMS、DCIM… とは？" }
+topo.system.other:       { vi: "Chưa phân loại (thiếu system trong Point Map)", ja: "未分類（Point Map に system がありません）" }
+topo.link.gateway:       { vi: "Gateway Modbus TCP → RS-485", ja: "ゲートウェイ Modbus TCP → RS-485" }
+topo.link.rtu:           { vi: "Bus RS-485 (Modbus RTU)", ja: "RS-485 バス（Modbus RTU）" }
+topo.link.direct:        { vi: "Modbus TCP · IP riêng", ja: "Modbus TCP · 専用 IP" }
+topo.link.snmp:          { vi: "SNMP · UDP",         ja: "SNMP · UDP" }
+topo.link.bacnet:        { vi: "BACnet/IP · UDP",    ja: "BACnet/IP · UDP" }
+topo.link_hint.gateway:  { vi: "Nhiều thiết bị RS-485 sau một IP, phân biệt bằng device_id", ja: "1 つの IP の配下に複数の RS-485 機器。device_id で区別" }
+topo.link_hint.rtu:      { vi: "Đồng hồ nối thẳng vào cổng USB-RS485 của edge", ja: "エッジの USB-RS485 ポートに直結した計器" }
+topo.link_hint.direct:   { vi: "Thiết bị có cổng Ethernet và IP riêng", ja: "Ethernet ポートと専用 IP を持つ機器" }
+topo.link_hint.snmp:     { vi: "Card mạng SNMP của UPS, đọc theo OID", ja: "UPS の SNMP カード。OID で読み取り" }
+topo.link_hint.bacnet:   { vi: "Thiết bị BMS trên mạng BACnet/IP; ghi kèm mức ưu tiên", ja: "BACnet/IP 上の BMS 機器。優先度付きで書き込み" }
+topo.edge_hint:          { vi: "chạy tại container, vẫn chạy khi mất WAN", ja: "コンテナで稼働し、WAN 断でも動作" }
+topo.part.point_map:     { vi: "Point Map",          ja: "Point Map" }
+topo.note.point_map:     { vi: "Nguồn dữ liệu duy nhất: thiết bị, điểm đo, cảnh báo, sơ đồ này", ja: "唯一のデータ源：機器、計測点、アラート、この図" }
+topo.part.telegraf:      { vi: "Telegraf",           ja: "Telegraf" }
+topo.note.telegraf:      { vi: "Đọc Modbus và SNMP. Cấu hình sinh từ Point Map; chưa chạy thử với Telegraf thật",
+                           ja: "Modbus と SNMP を読み取り。設定は Point Map から生成。実機の Telegraf では未検証" }
+topo.part.bacnet_collector: { vi: "Collector BACnet", ja: "BACnet コレクター" }
+topo.note.bacnet_collector: { vi: "Python: đọc BACnet, ghi kèm mức ưu tiên, nhả lệnh", ja: "Python：BACnet の読み取り、優先度付き書き込み、指令の解除" }
+topo.part.write_service: { vi: "Write-service",      ja: "書き込みサービス" }
+topo.note.write_service: { vi: "Ghi qua rào chắn, đọc lại xác nhận, nhật ký kiểm toán", ja: "ガード経由で書き込み、読み戻し確認、監査ログ" }
+topo.part.alerts:        { vi: "Cảnh báo tại chỗ",   ja: "現地アラート" }
+topo.note.alerts:        { vi: "Luật ngưỡng trong Point Map; hiện chạy trong collector mẫu", ja: "Point Map のしきい値ルール。現在はサンプルコレクター内で動作" }
+topo.part.collector:     { vi: "Collector mẫu (lab)", ja: "サンプルコレクター（ラボ）" }
+topo.note.collector:     { vi: "Trang xem số liệu cổng 8080, khung tin thô, đọc khi bấm", ja: "8080 番ポートの表示画面、生フレーム、手動読み取り" }
+topo.part.mqtt:          { vi: "MQTT TLS",           ja: "MQTT TLS" }
+topo.note.mqtt:          { vi: "Gửi số liệu từ edge lên trung tâm", ja: "エッジから中央へ計測値を送信" }
+topo.part.dcim:          { vi: "DCIM",               ja: "DCIM" }
+topo.note.dcim:          { vi: "Rails + Nuxt + PostgreSQL: giám sát nhiều container", ja: "Rails + Nuxt + PostgreSQL：複数コンテナを監視" }
+topo.part.itsm:          { vi: "ITSM",               ja: "ITSM" }
+topo.note.itsm:          { vi: "Sự cố, yêu cầu, thay đổi: phiếu từ cảnh báo", ja: "インシデント・要求・変更：アラートからチケット化" }
+topo.status.ready:       { vi: "Đã có",              ja: "実装済み" }
+topo.status.partial:     { vi: "Một phần",           ja: "一部実装" }
+topo.status.planned:     { vi: "Chưa có",            ja: "未実装" }
+topo.status_hint.ready:  { vi: "Có trong repo, chạy được với simulator", ja: "リポジトリにあり、シミュレーターで動作" }
+topo.status_hint.partial: { vi: "Có một phần, xem ghi chú", ja: "一部のみ実装。注記を参照" }
+topo.status_hint.planned: { vi: "Chưa có trong repo — sẽ phát triển", ja: "リポジトリにまだありません — 今後開発" }
+topo.legend_arch:        { vi: "Mũi tên: dữ liệu đi · nét đứt: tới phần chưa có · bấm thiết bị để đặt giá trị",
+                           ja: "矢印：データの流れ · 破線：未実装部分へ · 機器をクリックで値を設定" }
+topo.assumed:            { vi: "Sơ đồ GIẢ ĐỊNH — chưa có bản vẽ điện thật của site. Sửa mục topology trong edge/point-map/devices.yml rồi đổi assumed: false.",
+                           ja: "仮定の図です — サイトの実際の電気図面はまだありません。edge/point-map/devices.yml の topology を修正し、assumed: false にしてください。" }
+topo.no_power:           { vi: "Point Map chưa có mục topology.power", ja: "Point Map に topology.power がありません" }
+topo.kind.grid:          { vi: "nguồn lưới",         ja: "商用電源" }
+topo.kind.panel:         { vi: "tủ điện",            ja: "分電盤" }
+topo.kind.ups:           { vi: "UPS",                ja: "UPS" }
+topo.kind.battery:       { vi: "pin lưu trữ",        ja: "蓄電池" }
+topo.kind.load:          { vi: "tải",                ja: "負荷" }
+topo.kind.cooling:       { vi: "làm mát",            ja: "空調" }
+topo.meter_hint:         { vi: "Đồng hồ đo tại tủ này: {device}", ja: "この盤の計器：{device}" }
+topo.open_device:        { vi: "Bấm để mở thiết bị và đặt giá trị", ja: "クリックで機器を開き値を設定" }
+topo.cooling:            { vi: "làm mát",            ja: "冷却" }

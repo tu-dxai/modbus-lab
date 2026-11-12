@@ -323,3 +323,69 @@ def test_startup_rejects_invalid_point_map(tmp_path, script, extra):
                        capture_output=True, text=True, timeout=10, env=env)
     assert r.returncode != 0
     assert "ABDC" in r.stdout + r.stderr
+
+
+# ---------- sơ đồ DC: hệ thống của thiết bị, đơn tuyến điện, làm mát ----------
+def node(cfg, node_id):
+    return next(n for n in cfg["topology"]["power"] if n["id"] == node_id)
+
+
+def test_every_device_belongs_to_a_system():
+    assert {d["name"]: d["system"] for d in GOOD["devices"]} == {
+        "dong-ho-dien-01": "EPMS", "dong-ho-dien-02": "EPMS", "dong-ho-rs485-03": "EPMS",
+        "bess-01": "EPMS", "ups-01": "EPMS", "crah-01": "BMS"}
+
+
+def test_power_topology_is_marked_assumed():
+    assert GOOD["topology"]["assumed"] is True
+    roots = [n for n in GOOD["topology"]["power"] if "from" not in n]
+    assert [n["kind"] for n in roots] == ["grid"]
+
+
+def test_unknown_system():
+    cfg = broken()
+    device(cfg, "bess-01")["system"] = "SCADA"
+    e = one_error(cfg)
+    assert "bess-01" in e and "SCADA" in e
+
+
+@pytest.mark.parametrize("change,word", [
+    (lambda c: node(c, "tu-rack").update(meters=["dong-ho-khong-co"]), "dong-ho-khong-co"),
+    (lambda c: node(c, "ups-01").update(device="ups-99"), "ups-99"),
+    (lambda c: node(c, "ups-01").update({"from": "tu-khong-co"}), "tu-khong-co"),
+    (lambda c: node(c, "ups-01").update(kind="nha-may"), "nha-may"),
+    (lambda c: node(c, "tu-chinh").update({"from": "tu-rack"}), "vòng"),
+    (lambda c: c["topology"]["power"].append(dict(node(c, "day-rack"))), "day-rack"),
+    (lambda c: node(c, "day-rack").pop("label"), "label"),
+    (lambda c: c["topology"]["cooling"][0].update(serves="phong-khac"), "phong-khac"),
+    (lambda c: c["topology"]["cooling"][0].update(device="crah-99"), "crah-99"),
+])
+def test_bad_topology(change, word):
+    cfg = broken()
+    change(cfg)
+    e = one_error(cfg)
+    assert "topology" in e and word in e
+
+
+def test_device_may_appear_only_once_in_power_topology():
+    cfg = broken()
+    node(cfg, "tu-phu")["meters"].append("dong-ho-dien-01")       # đã là đồng hồ của tu-chinh
+    e = one_error(cfg)
+    assert "dong-ho-dien-01" in e
+
+
+def test_topology_is_optional():
+    cfg = broken()
+    del cfg["topology"]
+    for d in cfg["devices"]:
+        del d["system"]
+    assert validate(cfg) == []
+
+
+def test_unreachable_device_is_removed_from_topology_but_node_stays():
+    env = {"addresses": {k: v for k, v in LAB.items()}, "serial": {},
+           "unreachable": {"rtu:/dev/ttyUSB0": "cổng serial nằm trong container"},
+           "bacnet_client": "127.0.0.1/8:47809"}
+    cfg = load(PATH, env="sim", env_cfg=env)
+    tu_phu = node(cfg, "tu-phu")
+    assert tu_phu["meters"] == [] and tu_phu["show"] == [] and tu_phu["label"]["vi"]
