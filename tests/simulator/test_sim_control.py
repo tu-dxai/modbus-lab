@@ -225,3 +225,51 @@ def test_cli_set_and_get(sim, ctl):
     assert ctl.get("bess-01.muc_pin")["value"] == pytest.approx(42.5)
     r = run("set", "khong-co.diem_nao", "1")
     assert r.returncode != 0 and "khong-co.diem_nao" in r.stdout + r.stderr
+
+
+# ---------- nhân chứng ghi lại mọi kiểu lệnh ghi; đầu vào xấu không làm hỏng simulator ----------
+def test_mask_write_and_read_write_registers_are_logged(sim, ctl):
+    """FC23 và FC22 cũng đổi giá trị thanh ghi, nên phải có trong nhật ký như FC6/FC16; lệnh ghi coil cũng vậy."""
+    d = device(sim.cfg, "bess-01")
+    mark = ctl.last_seq()
+    c = ModbusTcpClient(d["host"], port=d["port"], timeout=1, retries=0)
+    c.connect()
+    try:
+        assert not c.readwrite_registers(read_address=10, read_count=1, write_address=10, values=[1],
+                                         device_id=d["device_id"]).isError()
+        assert not c.mask_write_register(address=10, and_mask=0x0000, or_mask=0x0000,
+                                         device_id=d["device_id"]).isError()
+        c.write_coil(0, True, device_id=d["device_id"])
+    finally:
+        c.close()
+    fc23, fc22, fc5 = ctl.writes(since=mark)
+    assert fc23["function"] == 23 and fc23["accepted"]
+    assert fc23["points"] == [{"key": "bess-01.che_do", "before": 0, "value": 1}]
+    assert fc22["function"] == 22 and fc22["accepted"]
+    assert fc22["points"] == [{"key": "bess-01.che_do", "before": 1, "value": 0}]
+    assert fc5["function"] == 5 and fc5["points"] == [] and fc5["coils"] == [True]
+    assert ctl.get("bess-01.che_do")["value"] == 0
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf")])
+def test_set_nan_is_rejected_and_state_stays_valid_json(sim, ctl, value):
+    code, r = http(sim.control_url + "/api/state", {"bess-01.muc_pin": value})
+    assert code == 400 and r["code"] == "sim.bad_value"
+    with urllib.request.urlopen(sim.control_url + "/api/state", timeout=3) as resp:   # json.loads nhận NaN:
+        raw = resp.read()                                                              # kiểm chuỗi thô
+    assert b"NaN" not in raw and b"Infinity" not in raw
+
+
+@pytest.mark.parametrize("length", ["-1", "abc", str(10 ** 9)])
+def test_bad_content_length_is_rejected_without_hanging(sim, length):
+    import http.client
+    from urllib.parse import urlparse
+    u = urlparse(sim.control_url)
+    conn = http.client.HTTPConnection(u.hostname, u.port, timeout=3)
+    try:
+        conn.putrequest("POST", "/api/state")
+        conn.putheader("Content-Length", length)
+        conn.endheaders()
+        assert conn.getresponse().status == 400
+    finally:
+        conn.close()

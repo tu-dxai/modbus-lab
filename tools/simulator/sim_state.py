@@ -2,14 +2,16 @@
 
 Tách khỏi sim.py để sim.py (chạy trực tiếp) và sim_control.py dùng chung đúng một lớp.
 """
-import random, struct, threading, time
+import math, random, struct, threading, time
 from datetime import datetime
 from codec import SIZE, decode, encode
 from frames import FrameLog
 from i18n import Translatable
 from point_map import device_meta, point_ref
 
-WRITE_FC = {6, 16}
+# Mọi lệnh ghi Modbus mà nhân chứng ghi lại: 6/16 (thanh ghi), 22 (mask write), 23 (đọc + ghi nhiều thanh ghi);
+# 5/15 (coil) — thiết bị giả không có coil ghi được nên luôn bị từ chối, nhưng vẫn phải có trong nhật ký.
+WRITE_FC = {5, 6, 15, 16, 22, 23}
 
 
 class UnknownPoint(Translatable):
@@ -58,6 +60,7 @@ class SimState:
         self.hooks: dict[str, list] = {}                   # điểm -> hàm gọi khi đặt bằng tay (thiết bị BACnet)
         self.reset_hooks: list = []                        # hàm gọi khi đặt lại (xóa mảng ưu tiên BACnet)
         self.off: set[str] = set()                         # thiết bị đang tắt (giả lập mất điện)
+        self.power_lock = threading.Lock()                 # bật / tắt lần lượt: kiểm tra, đổi, mở/đóng server
         self.power_hooks: dict[str, list] = {}             # thiết bị -> hàm gọi khi bật/tắt (server TCP riêng)
         self.log: list[dict] = []
         self.pending: dict[tuple, dict] = {}               # (endpoint, device_id, transaction_id) -> lệnh chờ phản hồi
@@ -87,17 +90,24 @@ class SimState:
         """Bật / tắt thiết bị. Thiết bị tắt phản ứng như mất điện, theo kiểu kết nối (xem sim.py)."""
         if name not in {d["name"] for d in self.cfg["devices"]}:
             raise UnknownDevice("sim.unknown_device", device=name)
-        if self.is_on(name) == on:
-            return
-        with self.lock:
-            (self.off.discard if on else self.off.add)(name)
-        for hook in self.power_hooks.get(name, []):
-            hook(on)
+        with self.power_lock:                              # hai lệnh bật/tắt cùng lúc không làm lệch trạng thái
+            if self.is_on(name) == on:
+                return
+            with self.lock:
+                (self.off.discard if on else self.off.add)(name)
+            for hook in self.power_hooks.get(name, []):
+                hook(on)
 
     def _quantize(self, key: str, value) -> float:
         """Giá trị thiết bị thật sẽ báo sau khi lưu (ví dụ 231.55 V lưu x10 -> 231.6)."""
         d, p = self.points[key]
         scale = p.get("scale", 1)
+        try:
+            finite = math.isfinite(float(value))
+        except (TypeError, ValueError, OverflowError):
+            finite = False
+        if not finite:                                     # NaN / vô cực: JSON trả về sẽ hỏng, trang ngừng cập nhật
+            raise BadValue("sim.bad_value", key=key, value=str(value), type=p.get("type", "?"), scale=scale)
         if d.get("protocol") in ("snmp", "bacnet"):
             return self._quantize_typed(key, d, p, value, scale)
         try:
@@ -173,20 +183,18 @@ class SimState:
 
         Điểm writable (giá trị client ghi vào, ví dụ chế độ vận hành) giữ nguyên.
         """
-        new = {}
-        for key, (d, p) in self.points.items():
-            noise = p.get("sim", {}).get("noise", 0)
-            if p.get("writable") or not noise:
-                continue
-            v = self.anchor[key] + random.uniform(-noise, noise)
-            if p.get("type", "float32") == "float32":       # BACnet analog (REAL) cũng là số thực
-                v = round(v, 2)                           # số đo thật hiếm khi có nhiều số lẻ hơn
-            try:
-                new[key] = self._quantize(key, v)
-            except BadValue:                              # ra ngoài khoảng kiểu dữ liệu: giữ giá trị cũ
-                pass
-        with self.lock:
-            self.values.update(new)
+        with self.lock:                                   # giữ khóa cả lúc tính: không ghi đè giá trị vừa đặt tay
+            for key, (d, p) in self.points.items():
+                noise = p.get("sim", {}).get("noise", 0)
+                if p.get("writable") or not noise:
+                    continue
+                v = self.anchor[key] + random.uniform(-noise, noise)
+                if p.get("type", "float32") == "float32":   # BACnet analog (REAL) cũng là số thực
+                    v = round(v, 2)                       # số đo thật hiếm khi có nhiều số lẻ hơn
+                try:
+                    self.values[key] = self._quantize(key, v)
+                except BadValue:                          # ra ngoài khoảng kiểu dữ liệu: giữ giá trị cũ
+                    pass
 
     def run_auto(self) -> None:
         """Luồng nền: tự thay đổi mỗi self.auto giây; self.auto = 0 thì nằm chờ."""
@@ -221,19 +229,25 @@ class SimState:
     def fill(self, d: dict, table: str, start_address: int, registers: list[int]) -> None:
         """Lệnh đọc: ghi giá trị hiện tại của các điểm trong bảng vào thanh ghi."""
         with self.lock:
-            for p in d["points"]:
-                if p["table"] == table:
-                    key = f"{d['name']}.{p['name']}"
-                    regs = encode(self.values[key], p["type"], d["byte_order"], p.get("scale", 1))
-                    i = p["address"] - start_address
-                    registers[i:i + len(regs)] = regs
+            self._fill(d, table, start_address, registers)
+
+    def _fill(self, d: dict, table: str, start_address: int, registers: list[int]) -> None:
+        for p in d["points"]:
+            if p["table"] == table:
+                key = f"{d['name']}.{p['name']}"
+                regs = encode(self.values[key], p["type"], d["byte_order"], p.get("scale", 1))
+                i = p["address"] - start_address
+                registers[i:i + len(regs)] = regs
 
     def apply_write(self, d: dict, table: str, start_address: int, registers: list[int],
                     address: int, set_values: list[int]) -> None:
         """Lệnh ghi đã qua kiểm tra của thiết bị: cập nhật giá trị các điểm bị ghi (kể cả ghi một nửa điểm 32 bit)."""
-        merged = list(registers)
-        merged[address - start_address:address - start_address + len(set_values)] = set_values
         with self.lock:
+            # Thanh ghi pymodbus giữ là nội dung của lần ĐỌC trước, không phải giá trị hiện tại (đặt tay, tự thay đổi
+            # sau đó): điền lại giá trị hiện tại trước, để ghi một nửa điểm 32 bit ghép với nửa còn lại đúng.
+            merged = list(registers)
+            self._fill(d, table, start_address, merged)
+            merged[address - start_address:address - start_address + len(set_values)] = set_values
             for p in d["points"]:
                 if p["table"] == table and _overlaps(p, address, len(set_values)):
                     i = p["address"] - start_address
@@ -244,7 +258,9 @@ class SimState:
 
     # ---------- nhân chứng ----------
     def tracer(self, ep: str, site_ep: str):
-        """Hook trace_pdu cho server ở endpoint `ep`: pymodbus gọi với mọi PDU nhận và gửi."""
+        """Hook trace_pdu cho server ở endpoint `ep`: pymodbus gọi với mọi PDU nhận và gửi.
+
+        trace_pdu.unanswered(pdu): lệnh tới thiết bị đang tắt trên bus (không ai trả lời) — vẫn vào nhật ký."""
         def trace_pdu(sending: bool, pdu):
             try:                                       # lỗi ở nhân chứng không được làm sập thiết bị giả
                 if (pdu.function_code & 0x7F) in WRITE_FC:
@@ -255,35 +271,65 @@ class SimState:
             except Exception as e:
                 print(f"  ?? simulator: không ghi được nhật ký lệnh ghi: {e!r}")
             return pdu
+
+        def unanswered(pdu) -> None:
+            try:
+                if pdu.function_code in WRITE_FC:
+                    self._requested(ep, site_ep, pdu)
+                    self._close(ep, pdu, accepted=False, exception=None, no_response=True)
+            except Exception as e:
+                print(f"  ?? simulator: không ghi được nhật ký lệnh ghi: {e!r}")
+        trace_pdu.unanswered = unanswered
         return trace_pdu
+
+    def _written_registers(self, d: dict | None, pdu) -> tuple[int, list[int]]:
+        """(ô đầu, các thanh ghi sẽ được ghi) của lệnh ghi; coil (FC5/15) không có thanh ghi."""
+        fc = pdu.function_code
+        if fc in (5, 15):
+            return pdu.address, []
+        if fc == 23:
+            return pdu.write_address, list(pdu.write_registers)
+        if fc == 22:                                   # mask write: tính giá trị mới từ giá trị hiện tại
+            reg = 0                                    # ô không khai báo: thiết bị sẽ từ chối, giá trị không quan trọng
+            for p in (d["points"] if d else []):
+                if p["table"] == "holding" and _overlaps(p, pdu.address, 1):
+                    regs = encode(self.values[f"{d['name']}.{p['name']}"], p["type"], d["byte_order"], p.get("scale", 1))
+                    reg = regs[pdu.address - p["address"]]
+            return pdu.address, [(reg & pdu.and_mask) | (pdu.or_mask & ~pdu.and_mask & 0xFFFF)]
+        return pdu.address, list(pdu.registers)
 
     def _requested(self, ep: str, site_ep: str, pdu) -> None:
         d = self.devices.get((ep, pdu.dev_id))
-        regs = list(pdu.registers)
         points = []
         with self.lock:
-            for p in (d["points"] if d else []):
-                if p["table"] == "holding" and _overlaps(p, pdu.address, len(regs)):
+            start, regs = self._written_registers(d, pdu)
+            for p in (d["points"] if d and regs else []):
+                if p["table"] == "holding" and _overlaps(p, start, len(regs)):
                     key = f"{d['name']}.{p['name']}"
-                    i, n = p["address"] - pdu.address, SIZE[p["type"]]
+                    i, n = p["address"] - start, SIZE[p["type"]]
                     full = 0 <= i and i + n <= len(regs)       # ghi đủ mọi ô của điểm?
                     value = _round(decode(regs[i:i + n], p["type"], d["byte_order"], p.get("scale", 1))) if full else None
                     points.append({"key": key, "before": self.values[key], "value": value})
-            self.pending[(ep, pdu.dev_id, pdu.transaction_id)] = {
-                "at": datetime.now().isoformat(timespec="milliseconds"),
-                "endpoint": ep, "site_endpoint": site_ep,
-                "device": d["name"] if d else None, "device_id": pdu.dev_id,
-                "function": pdu.function_code, "address": pdu.address, "registers": regs, "points": points}
+            entry = {"at": datetime.now().isoformat(timespec="milliseconds"),
+                     "endpoint": ep, "site_endpoint": site_ep,
+                     "device": d["name"] if d else None, "device_id": pdu.dev_id,
+                     "function": pdu.function_code, "address": start, "registers": regs, "points": points}
+            if pdu.function_code in (5, 15):
+                entry["coils"] = [bool(b) for b in pdu.bits]
+            self.pending[(ep, pdu.dev_id, pdu.transaction_id)] = entry
 
     def _answered(self, ep: str, pdu) -> None:
+        rejected = bool(pdu.function_code & 0x80)
+        self._close(ep, pdu, accepted=not rejected, exception=pdu.exception_code if rejected else None)
+
+    def _close(self, ep: str, pdu, accepted: bool, exception, no_response: bool = False) -> None:
         with self.lock:
             entry = self.pending.pop((ep, pdu.dev_id, pdu.transaction_id), None)
             if entry is None:
                 return
-            rejected = bool(pdu.function_code & 0x80)
             self.seq += 1
-            self.log.append({"seq": self.seq, **entry, "accepted": not rejected,
-                             "exception": pdu.exception_code if rejected else None})
+            self.log.append({"seq": self.seq, **entry, "accepted": accepted, "exception": exception,
+                             **({"no_response": True} if no_response else {})})
 
     def writes(self, point: str | None = None, since: int | None = None) -> list[dict]:
         with self.lock:

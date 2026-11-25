@@ -389,3 +389,70 @@ def test_unreachable_device_is_removed_from_topology_but_node_stays():
     cfg = load(PATH, env="sim", env_cfg=env)
     tu_phu = node(cfg, "tu-phu")
     assert tu_phu["meters"] == [] and tu_phu["show"] == [] and tu_phu["label"]["vi"]
+
+
+# ---------- address, scale, giới hạn ghi, sim.base: số sai thì báo khi khởi động, không âm thầm sai ----------
+@pytest.mark.parametrize("value,word", [(-1, "address"), (70000, "address"), ("4", "address")])
+def test_invalid_address(value, word):
+    cfg = broken()
+    point(cfg, "dong-ho-dien-01", "dien_ap")["address"] = value
+    e = one_error(cfg)
+    assert "dong-ho-dien-01.dien_ap" in e and word in e
+
+
+def test_32bit_point_must_fit_below_last_register():
+    cfg = broken()
+    point(cfg, "dong-ho-dien-01", "cong_suat")["address"] = 65535       # float32 cần ô 65535 và 65536
+    assert "address 65535" in one_error(cfg)
+
+
+@pytest.mark.parametrize("value", [0, "0.1", True])
+def test_invalid_scale(value):
+    cfg = broken()
+    point(cfg, "dong-ho-dien-01", "dien_ap")["scale"] = value
+    e = one_error(cfg)
+    assert "dong-ho-dien-01.dien_ap" in e and "scale" in e
+
+
+def test_scale_checked_for_snmp_points_too():
+    cfg = broken()
+    point(cfg, "ups-01", "dien_ap_pin")["scale"] = 0
+    assert "ups-01.dien_ap_pin" in one_error(cfg)
+
+
+def test_allowed_value_must_fit_register_type():
+    cfg = broken()
+    point(cfg, "bess-01", "che_do")["allowed"] = [0, 70000]               # uint16 tối đa 65535
+    e = one_error(cfg)
+    assert "bess-01.che_do" in e and "allowed 70000" in e
+
+
+def test_range_limit_must_be_multiple_of_scale():
+    cfg = broken()
+    p = point(cfg, "dong-ho-dien-01", "nhiet_do_tu")                      # int16, scale 0.1
+    p.update(writable=True, min=-40, max=80.05)
+    e = one_error(cfg)
+    assert "nhiet_do_tu" in e and "max" in e and "bội số" in e
+
+
+def test_writable_input_register_is_rejected():
+    cfg = broken()
+    point(cfg, "bess-01", "muc_pin").update(writable=True, min=0, max=100)   # muc_pin nằm ở input register
+    e = one_error(cfg)
+    assert "bess-01.muc_pin" in e and "input register" in e
+
+
+def test_sim_base_must_fit_register_type():
+    cfg = broken()
+    point(cfg, "dong-ho-dien-01", "dien_ap")["sim"]["base"] = 7000          # uint16 x0.1 tối đa 6553.5
+    e = one_error(cfg)
+    assert "dong-ho-dien-01.dien_ap" in e and "sim.base" in e
+
+
+def test_bacnet_binary_point_must_use_allowed_not_range():
+    cfg = broken()
+    p = point(cfg, "crah-01", "lenh_chay")
+    del p["allowed"]
+    p.update(min=0, max=1)
+    e = one_error(cfg)
+    assert "crah-01.lenh_chay" in e and "allowed" in e

@@ -3,7 +3,11 @@
 Simulator chung ở tests/conftest.py mở bus RS-485 ảo cho các thiết bị transport: rtu; collector đọc
 qua cổng serial đó như qua cổng USB-RS485 thật.
 """
-import copy, tomllib
+import copy
+try:
+    import tomllib
+except ModuleNotFoundError:                        # Python 3.10
+    import tomli as tomllib
 import pytest
 from collector import poll_once, LATEST
 from conftest import device, lab_config

@@ -57,6 +57,7 @@ DATA_LOCK = threading.Lock()                   # trang web đọc số liệu tr
 PAGE = Path(__file__).with_name("collector.html")
 WEB = Path(__file__).resolve().parents[1] / "web"     # giao diện dùng chung với trang simulator: ui.css, ui.js
 AUTO_MAX = 3600
+MAX_BODY = 1 << 20                             # 1 MB: lớn hơn mọi yêu cầu hợp lệ (kể cả số liệu Telegraf)
 
 
 def poll_once(conns, cfg, device: str | None = None, point: str | None = None, only: set | None = None) -> dict:
@@ -110,18 +111,21 @@ def poll_once(conns, cfg, device: str | None = None, point: str | None = None, o
 def refresh_environment(cfg: dict, conns) -> bool:
     """--env auto: hỏi lại simulator trước mỗi lượt đọc. Thiết bị đổi chỗ nghe (simulator chạy sau collector,
     hay khởi động lại ở chỗ khác: make sim <-> Docker demo A04) thì nạp lại Point Map ngay trong cfg, xóa số liệu
-    cũ và mở lại kết nối. Simulator không trả lời thì giữ nguyên. Gọi khi đang giữ CLIENT_LOCK."""
+    cũ và mở lại kết nối. Simulator không trả lời thì về môi trường lab. Gọi khi đang giữ CLIENT_LOCK."""
     auto = cfg.get("auto")
     if not auto:
         return False
     try:
         env_cfg = SimControl(auto["sim_url"], timeout=1).environment(auto["bacnet_port"])
     except SimError:
-        return False
+        env_cfg = None
     if env_cfg == auto["env_cfg"]:
         return False
     try:
-        new = load(auto["path"], "sim", env_cfg)
+        # Simulator vừa biến mất: về môi trường lab như lúc khởi động không thấy simulator. Không giữ địa chỉ
+        # simulator cũ — simulator Docker demo A04 báo địa chỉ site thật (10.20.0.x), giữ lại thì máy đang cắm
+        # mạng site sẽ đọc / ghi thiết bị thật trong khi trang vẫn ghi môi trường sim.
+        new = load(auto["path"], "lab") if env_cfg is None else load(auto["path"], "sim", env_cfg)
     except PointMapError as e:
         print(f"Simulator tại {auto['sim_url']} không khớp Point Map: {'; '.join(e.errors)}")
         return False
@@ -137,7 +141,8 @@ def refresh_environment(cfg: dict, conns) -> bool:
         LATEST.clear(), HISTORY.clear(), ALERTS.clear()
         if Web.frames is not None:                 # khung tin: tra thiết bị theo địa chỉ mới
             Web.frames.devices = {(address(d), d.get("device_id")): d for d in cfg["devices"]}
-    print(f"Thiết bị theo simulator tại {auto['sim_url']} (vừa cập nhật địa chỉ)")
+    print(f"Thiết bị theo simulator tại {auto['sim_url']} (vừa cập nhật địa chỉ)" if env_cfg is not None else
+          f"Không thấy simulator tại {auto['sim_url']}: về môi trường lab, sẽ hỏi lại ở mỗi lượt đọc")
     for name, why in cfg.get("unreachable", {}).items():
         print(f"  bỏ qua {name}: {why}")
     return True
@@ -225,11 +230,11 @@ def snapshot(cfg):
             "status": STATUS}
 
 
-def auto_loop(conns, cfg):
+def auto_loop(conns, cfg, stopped: threading.Event | None = None):
     """Tự đọc theo STATUS["auto"] giây; 0 = nằm chờ. Nguồn Telegraf: đọc phần Python (BACnet, RS-485 cổng ảo)
     theo chu kỳ của Telegraf và theo dõi container. Chạy nền suốt đời tiến trình."""
     last = checked = 0.0
-    while Web.cfg is cfg:                          # serve() lần nữa với cấu hình khác: luồng cũ dừng, không đọc chồng
+    while Web.cfg is cfg and not (stopped and stopped.is_set()):   # serve() lại hoặc web dừng: luồng này dừng
         tg = STATUS.get("telegraf")
         if STATUS["source"] == "telegraf" and tg:
             if time.monotonic() - last >= tg["interval"]:
@@ -266,9 +271,20 @@ class Web(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def raw_body(self) -> bytes:
+        """Thân yêu cầu. Content-Length sai (không phải số, âm, quá lớn) -> ValueError, không đọc gì:
+        read(-1) sẽ treo luồng tới khi client đóng kết nối."""
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            raise ValueError("Content-Length") from None
+        if not 0 <= n <= MAX_BODY:
+            raise ValueError("Content-Length")
+        return self.rfile.read(n)
+
     def body(self):
         """JSON gửi lên; rỗng thì {}. Sai dạng -> ValueError."""
-        raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        raw = self.raw_body()
         data = json.loads(raw) if raw.strip() else {}
         if not isinstance(data, dict):
             raise ValueError
@@ -334,6 +350,8 @@ class Web(BaseHTTPRequestHandler):
         except ValueError:
             return self.reply(400, {"ok": False, **ApiError("api.bad_read_request").as_json()})
         device, point = req.get("device"), req.get("point")
+        if not all(v is None or isinstance(v, str) for v in (device, point)):
+            return self.reply(400, {"ok": False, **ApiError("api.bad_read_request").as_json()})
         names = {d["name"] for d in self.cfg["devices"]}
         keys = {f"{d['name']}.{p['name']}" for d in self.cfg["devices"] for p in d["points"]}
         target = point if point is not None else device
@@ -348,14 +366,19 @@ class Web(BaseHTTPRequestHandler):
 
     def telegraf(self):
         """Số liệu Telegraf gửi về (outputs.http). Đang ở nguồn Python thì bỏ qua (container cũ còn gửi nốt)."""
-        raw = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode("utf-8", "replace")
+        try:
+            raw = self.raw_body().decode("utf-8", "replace")
+        except ValueError:
+            return self.reply(400, {"ok": False, **ApiError("api.bad_telegraf_payload").as_json()})
+        if STATUS["source"] != "telegraf":
+            return self.reply(200, {"ok": True, "points": 0, "ignored": True})
         try:
             payload = json.loads(raw)
         except ValueError:
             payload = raw                              # JSON Lines
         try:
             rows = ingest(payload, self.cfg)
-        except (ValueError, TypeError, KeyError, AttributeError):
+        except (ValueError, TypeError, KeyError, AttributeError, OverflowError, OSError):
             return self.reply(400, {"ok": False, **ApiError("api.bad_telegraf_payload").as_json()})
         with DATA_LOCK:
             LATEST.update(rows)
@@ -399,10 +422,12 @@ class Web(BaseHTTPRequestHandler):
         self.reply(200, {"ok": True, "auto": interval})
 
     def write(self, relinquish=False):
-        from write import WriteBlocked, find, relinquish_guarded, write_guarded   # nhập muộn: write.py cũng nhập collector
+        from write import AuditFailed, WriteBlocked, find, relinquish_guarded, write_guarded   # nhập muộn
         try:
             req = self.body()
             key = str(req["point"])
+            if not relinquish and isinstance(req["value"], bool):
+                raise TypeError("value")
             value = None if relinquish else float(req["value"])
         except (ValueError, KeyError, TypeError):
             return self.reply(400, {"ok": False, **ApiError("api.bad_write_request").as_json()})
@@ -416,6 +441,10 @@ class Web(BaseHTTPRequestHandler):
         except WriteBlocked as e:
             print(f"  xx Rào chắn từ chối lệnh ghi từ web: {key} = {value} ({e})")
             return self.reply(403, {"ok": False, "blocked": True, **e.as_json()})
+        except AuditFailed as e:                   # thiết bị ĐÃ đổi: báo rõ, không coi là ghi thất bại
+            print(f"  !! {e}")
+            return self.reply(500, {"ok": False, "written": True, "point": key, "before": e.params["before"],
+                                    "after": e.params["after"], **e.as_json()})
         except Translatable as e:                  # thiết bị từ chối, đọc lại không khớp, mã lỗi Modbus
             return self.reply(502, {"ok": False, **e.as_json()})
         except Exception as e:                     # mất kết nối, timeout
@@ -439,8 +468,13 @@ def serve(cfg, conns, host="127.0.0.1", port=8080, frames=500, audit=None):
     Web.cfg, Web.conns, Web.frames, Web.audit = cfg, conns, log, audit
     srv = ThreadingHTTPServer((host, port), Web)
     Web.port = srv.server_address[1]
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    threading.Thread(target=auto_loop, args=(conns, cfg), daemon=True).start()
+    stopped = threading.Event()                    # srv.shutdown(): luồng tự đọc cũng dừng, không đọc bằng kết nối đã đóng
+
+    def run():
+        srv.serve_forever()
+        stopped.set()
+    threading.Thread(target=run, daemon=True).start()
+    threading.Thread(target=auto_loop, args=(conns, cfg, stopped), daemon=True).start()
     return srv
 
 
@@ -497,8 +531,11 @@ if __name__ == "__main__":
     STATUS["auto"] = args.interval
     serve(cfg, c, args.web_host, args.web_port, args.frames, AuditLog(args.audit))
     atexit.register(lambda: RUNNER and RUNNER.stop())   # tắt collector = dừng luôn container Telegraf
-    # SIGTERM (timeout, docker stop, kill) mặc định thoát ngay, bỏ qua atexit: đổi thành thoát bình thường
+    # SIGTERM (timeout, docker stop, kill) và SIGHUP (đóng terminal, rớt SSH) mặc định thoát ngay, bỏ qua atexit:
+    # đổi thành thoát bình thường để container Telegraf không bị bỏ lại đọc thiết bị mãi
     signal.signal(signal.SIGTERM, _exit_on_sigterm)
+    if hasattr(signal, "SIGHUP"):
+        signal.signal(signal.SIGHUP, _exit_on_sigterm)
     if args.source == "telegraf":
         try:
             set_source(cfg, "telegraf", args.telegraf_interval)

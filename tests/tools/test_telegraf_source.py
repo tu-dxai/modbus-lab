@@ -74,7 +74,8 @@ def web(cfg):
     c.close()
 
 
-def test_api_telegraf_updates_points(web):
+def test_api_telegraf_updates_points(web, monkeypatch):
+    monkeypatch.setitem(STATUS, "source", "telegraf")
     code, r = call(web + "/api/telegraf", SAMPLE)
     assert code == 200 and r["ok"] and r["points"] == 4
     assert LATEST["ups-01.tai_ra"]["source"] == "telegraf" and LATEST["ups-01.tai_ra"]["value"] == 42
@@ -86,9 +87,9 @@ def test_api_source_rejects_bad_request(web, body):
     assert code == 400 and r["code"] == "api.bad_source_request"
 
 
-def test_stale_telegraf_point_is_an_error(cfg):
-    LATEST["bess-01.muc_pin"] = dict(ingest(SAMPLE, cfg)["bess-01.muc_pin"], ts=time.time() - 60)
-    STATUS["telegraf"] = dict(STATUS.get("telegraf") or {}, interval=2)
+def test_stale_telegraf_point_is_an_error(cfg, monkeypatch):
+    monkeypatch.setitem(LATEST, "bess-01.muc_pin", dict(ingest(SAMPLE, cfg)["bess-01.muc_pin"], ts=time.time() - 60))
+    monkeypatch.setitem(STATUS, "telegraf", dict(STATUS.get("telegraf") or {}, interval=2))
     row = snapshot(cfg)["points"]["bess-01.muc_pin"]
     assert not row["ok"] and row["code"] == "telegraf.stale" and row["params"]["s"] >= 59
 
@@ -180,11 +181,20 @@ def test_device_switched_off_goes_stale(tg_sim, tg_web):
         ctl.power("bess-01", True)
 
 
+def _free_port() -> int:
+    import socket
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 @needs_docker
-def test_collector_killed_with_sigterm_removes_its_telegraf_container(tg_sim):
-    """timeout, docker stop, systemd... dừng collector bằng SIGTERM: container Telegraf cũng phải được gỡ."""
+@pytest.mark.parametrize("sig", ["SIGTERM", "SIGHUP"])
+def test_collector_killed_with_sigterm_removes_its_telegraf_container(tg_sim, sig):
+    """timeout, docker stop, systemd (SIGTERM), đóng terminal hay rớt SSH (SIGHUP) dừng collector: container
+    Telegraf cũng phải được gỡ, không bị bỏ lại đọc thiết bị mãi."""
     import os, signal, sys
-    port = 8097
+    port = _free_port()
     env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path), SIM_URL=tg_sim[1].url)
     p = subprocess.Popen([sys.executable, "tools/dashboard/collector.py", "--web-port", str(port),
                           "--source", "telegraf"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -196,9 +206,24 @@ def test_collector_killed_with_sigterm_removes_its_telegraf_container(tg_sim):
         while not alive() and time.time() < end:
             time.sleep(0.5)
         assert alive(), "collector không chạy được Telegraf"
-        p.send_signal(signal.SIGTERM)
+        p.send_signal(getattr(signal, sig))
         p.wait(timeout=20)
         assert not alive()
     finally:
         p.kill()
         subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+
+
+def test_api_telegraf_ignored_while_source_is_python(web, monkeypatch):
+    """Container cũ còn gửi nốt sau khi đổi về nguồn Python: không ghi đè số liệu Python vừa đọc."""
+    monkeypatch.setitem(STATUS, "source", "python")
+    LATEST.pop("ups-01.tai_ra", None)
+    code, r = call(web + "/api/telegraf", SAMPLE)
+    assert code == 200 and r["ignored"] and "ups-01.tai_ra" not in LATEST
+
+
+def test_nan_from_telegraf_is_an_error(cfg):
+    metric = {"name": "modbus", "tags": {"device": "bess-01"}, "fields": {"muc_pin": float("nan")},
+              "timestamp": int(time.time() * 1000)}
+    row = ingest(metric, cfg)["bess-01.muc_pin"]
+    assert not row["ok"] and row["value"] is None and row["code"] == "read.not_finite"

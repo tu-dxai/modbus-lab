@@ -1,10 +1,12 @@
-"""NHẬT KÝ KIỂM TOÁN LỆNH GHI — mỗi lệnh ghi qua rào chắn để lại một dòng JSON, chỉ ghi thêm.
+"""NHẬT KÝ KIỂM TOÁN LỆNH GHI — mỗi lệnh ghi qua rào chắn để lại dòng JSON, chỉ ghi thêm.
 
 Ghi lại cả lệnh bị rào chắn chặn và lệnh bị thiết bị từ chối, để trả lời được: ai ghi gì, vào đâu,
-lúc nào, kết quả ra sao. Mỗi dòng gồm:
+lúc nào, kết quả ra sao. Lệnh được gửi tới thiết bị có hai dòng: "attempt" ngay trước khi gửi (không ghi
+được dòng này thì lệnh không được gửi), rồi dòng kết quả — nên tiến trình chết giữa chừng vẫn để lại dấu.
+Lệnh bị rào chắn chặn chỉ có dòng "blocked". Mỗi dòng gồm:
   at, actor (cli:<user> | web:<ip>), env, site, point, device, device_id, site_endpoint,
-  value (giá trị yêu cầu), outcome (written | released | blocked | failed), before, after,
-  priority (BACnet), code, error
+  value (giá trị yêu cầu), outcome (attempt | written | released | blocked | failed), before, after,
+  priority (BACnet), relinquished (BACnet: đã nhả lệnh sau khi ghi thất bại), code, error
 
 Xem nhanh:  make audit            (20 dòng cuối)
             make audit ARGS="-n 100 --file var/audit/writes.jsonl"
@@ -41,7 +43,7 @@ class AuditLog:
         return rows[-n:] if n else rows
 
 
-OUTCOME_VI = {"written": "ĐÃ GHI", "released": "NHẢ LỆNH", "blocked": "BỊ CHẶN", "failed": "THẤT BẠI"}
+OUTCOME_VI = {"attempt": "GỬI LỆNH", "written": "ĐÃ GHI", "released": "NHẢ LỆNH", "blocked": "BỊ CHẶN", "failed": "THẤT BẠI"}
 
 
 def main(argv: list[str]) -> int:
@@ -53,12 +55,18 @@ def main(argv: list[str]) -> int:
     if not rows:
         print(f"(chưa có lệnh ghi nào trong {args.file})")
     for r in rows:
-        change = f"{r['before']} -> {r['after']}" if r["outcome"] in ("written", "released") \
-            else (r.get("error") or r.get("code"))
+        if r["outcome"] in ("written", "released"):
+            change = f"{r['before']} -> {r['after']}"
+        elif r["outcome"] == "attempt":
+            change = f"đang là {r['before']}"
+        else:
+            change = r.get("error") or r.get("code") or ""
+            if r.get("relinquished") is not None:
+                change += "; đã nhả lệnh" if r["relinquished"] else "; KHÔNG nhả được lệnh"
         if r.get("priority"):
             change += f"  (ưu tiên {r['priority']})"
         print(f"{r['at'][:23]}  {r['actor']:<18} {r['env']:<5} {OUTCOME_VI.get(r['outcome'], r['outcome']):<9} "
-              f"{r['point']} = {'relinquish' if r['outcome'] == 'released' else r['value']}  @ {r.get('site_endpoint') or '-'}  {change}")
+              f"{r['point']} = {'relinquish' if r['value'] is None else r['value']}  @ {r.get('site_endpoint') or '-'}  {change}")
     return 0
 
 

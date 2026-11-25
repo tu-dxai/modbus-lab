@@ -91,3 +91,19 @@ def test_auto_picks_up_simulator_started_after_collector(_sim):
 def test_lab_config_never_switches_environment(cfg):
     """Chỉ cấu hình nạp bằng --env auto mới hỏi lại simulator; lab / site giữ nguyên địa chỉ."""
     assert "auto" not in cfg
+
+
+def test_auto_returns_to_lab_when_simulator_disappears(_sim):
+    """Simulator Docker demo A04 báo địa chỉ site thật (10.20.0.x). Nó dừng thì collector không được giữ các
+    địa chỉ đó (máy cắm mạng site sẽ đọc / ghi thiết bị thật trong khi trang ghi môi trường sim)."""
+    cfg = load_config(PATH, "auto", sim_url=_sim[1].control_url, bacnet_port=BACNET_PORT)
+    assert cfg["env"] == "sim"
+    cfg["auto"]["sim_url"] = "http://127.0.0.1:9"      # simulator không còn trả lời
+    c = Connections()
+    try:
+        poll_once(c, cfg)
+    finally:
+        c.close()
+    assert cfg["env"] == "lab"
+    lab = load(PATH, "lab")
+    assert {d["name"]: d.get("host") for d in cfg["devices"]} == {d["name"]: d.get("host") for d in lab["devices"]}

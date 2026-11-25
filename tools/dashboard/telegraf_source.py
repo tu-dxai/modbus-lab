@@ -8,10 +8,10 @@ Telegraf chạy bằng Docker, image telegraf:1.32 (cùng bản demo A04), mạn
 (127.0.1.x của make sim, hay 10.20.0.x của Docker demo A04) và collector. Thiết bị Telegraf không mở được vẫn do
 Python đọc: BACnet (Telegraf không có plugin) và bus RS-485 nằm ở cổng serial ảo trên máy (không đưa vào container).
 """
-import json, subprocess, time
+import json, math, subprocess, time
 from pathlib import Path
 from generate import generate
-from i18n import Translatable
+from i18n import Translatable, t
 from point_map import SOCKET, is_rtu, protocol
 
 IMAGE = "telegraf:1.32"
@@ -52,6 +52,12 @@ def ingest(payload, cfg: dict) -> dict:
         for field, value in (m.get("fields") or {}).items():
             key = f"{dev}.{field}"
             if key not in points or not isinstance(value, (int, float)) or isinstance(value, bool):
+                continue
+            if not math.isfinite(value):               # NaN của float32 = "không có dữ liệu": lỗi, không phải số đo
+                rows[key] = {"value": None, "ok": False, "unit": points[key].get("unit", ""),
+                             "at": time.strftime("%H:%M:%S", time.localtime(ts)), "ts": ts, "source": "telegraf",
+                             "error": t("read.not_finite", value=str(value)), "code": "read.not_finite",
+                             "params": {"value": str(value)}}
                 continue
             rows[key] = {"value": round(value, 2), "ok": True, "unit": points[key].get("unit", ""),
                          "at": time.strftime("%H:%M:%S", time.localtime(ts)), "ts": ts, "source": "telegraf"}

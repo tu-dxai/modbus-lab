@@ -79,11 +79,22 @@ write.not_holding:       { vi: "chỉ ghi được vào holding register", ja: "
 write.device_rejected:   { vi: "thiết bị từ chối lệnh ghi, mã lỗi {code}", ja: "機器が書き込みを拒否しました（例外コード {code}）" }
 write.readback_mismatch: { vi: "đọc lại được {after}, không khớp giá trị vừa ghi {value}",
                            ja: "読み戻し値 {after} が書き込んだ値 {value} と一致しません" }
+write.not_representable: { vi: "giá trị {value} không lưu đúng được: điểm này chỉ nhận bội số của {step}",
+                           ja: "値 {value} は正確に保存できません：この計測点は {step} の倍数のみ受け付けます" }
+write.out_of_type_range: { vi: "giá trị {value} không vừa kiểu {type} với hệ số {scale}",
+                           ja: "値 {value} は型 {type}（係数 {scale}）に収まりません" }
+write.no_answer:         { vi: "thiết bị không xác nhận lệnh ghi ({detail})", ja: "機器が書き込みを確認しません（{detail}）" }
+write.audit_unavailable: { vi: "không ghi được nhật ký kiểm toán nên không gửi lệnh: {detail}",
+                           ja: "監査ログに記録できないため、コマンドを送信しません：{detail}" }
+write.audit_failed:      { vi: "ĐÃ ghi vào thiết bị ({point}: {before} -> {after}) nhưng không ghi được kết quả vào nhật ký kiểm toán: {detail}. Đừng ghi lại lần nữa.",
+                           ja: "機器への書き込みは完了しました（{point}：{before} → {after}）が、監査ログに結果を記録できませんでした：{detail}。再度書き込まないでください。" }
 
 # ---------- lỗi đọc (edge/modbus) ----------
 read.modbus_exception:   { vi: "mã lỗi Modbus {code}", ja: "Modbus 例外コード {code}" }
 read.unreachable:        { vi: "không kết nối được {endpoint}", ja: "{endpoint} に接続できません" }
 read.failed:             { vi: "không đọc được: {detail}", ja: "読み取りに失敗しました：{detail}" }
+read.not_finite:         { vi: "thiết bị báo giá trị không phải số ({value}) — thường là \"không có dữ liệu\"",
+                           ja: "機器が数値でない値（{value}）を返しました — 通常は「データなし」を意味します" }
 read.skipped:            { vi: "bỏ qua: {device} không trả lời ở điểm trước trong lượt này",
                            ja: "スキップ：{device} はこの周期の前の計測点で応答しませんでした" }
 read.snmp_no_answer:     { vi: "{endpoint} không trả lời SNMP sau {s} giây (sai community hoặc mất kết nối)",

@@ -5,6 +5,7 @@ và dùng chung MỘT kết nối TCP: nhiều gateway thật chỉ cho 1-4 kế
 Thiết bị Modbus RTU (transport: rtu) khai báo cổng serial; thiết bị cùng cổng = cùng bus RS-485,
 dùng chung một cổng mở (một bus chỉ có một master).
 """
+import math
 from pymodbus import FramerType
 from pymodbus.client import ModbusSerialClient, ModbusTcpClient
 from codec import SIZE, decode
@@ -85,6 +86,14 @@ class Connections:
         return d.get("protocol", "modbus") != "modbus" or self.client(d).connected
 
     def read(self, d: dict, p: dict) -> float:
+        """Đọc một điểm. NaN / vô cực (float32 0x7FC00000 nhiều đồng hồ dùng cho "không có dữ liệu") là lỗi đọc,
+        không phải số đo: để không ai coi nó là giá trị tốt (cảnh báo so sánh với NaN luôn sai)."""
+        value = self._read(d, p)
+        if not math.isfinite(value):
+            raise ReadError("read.not_finite", value=str(value))
+        return value
+
+    def _read(self, d: dict, p: dict) -> float:
         proto = d.get("protocol", "modbus")
         if proto in ("snmp", "bacnet"):
             try:

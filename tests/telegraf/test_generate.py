@@ -2,7 +2,11 @@
 
 Không chạy Telegraf thật: kiểm cấu hình đúng cú pháp TOML và khớp từng điểm trong Point Map.
 """
-import copy, subprocess, sys, os, tomllib
+import copy, subprocess, sys, os
+try:
+    import tomllib
+except ModuleNotFoundError:                        # Python 3.10
+    import tomli as tomllib
 import pytest
 from generate import TelegrafError, generate
 from point_map import read

@@ -137,3 +137,18 @@ def test_collector_page_has_frames_and_simulator_page_does_not(web, cfg):
     sim_page = Path("tools/simulator/control.html").read_text(encoding="utf-8")
     assert 'id="frames"' not in sim_page
     assert 'id="writes"' not in sim_page          # lệnh ghi xem ở khung tin collector (FC06/FC16), API vẫn giữ
+
+
+def test_async_bridge_timeout_is_builtin_timeout_error():
+    """Python 3.10: concurrent.futures.TimeoutError khác TimeoutError, nơi gọi (SNMP, BACnet) bắt TimeoutError
+    sẽ không thấy nó. run() phải ném TimeoutError có sẵn và hủy coroutine đang chạy."""
+    import asyncio
+    import async_bridge
+    started = []
+
+    async def slow():
+        started.append(1)
+        await asyncio.sleep(5)
+    with pytest.raises(TimeoutError):
+        async_bridge.run(slow(), 0.2)
+    assert started

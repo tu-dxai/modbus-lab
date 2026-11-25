@@ -161,3 +161,61 @@ def test_web_auto_reading_can_be_switched_on_and_off(web):
 def test_web_auto_rejects_bad_interval(web, interval):
     code, r = call(web + "/api/auto", {"interval": interval})
     assert code == 400 and r["code"] == "api.bad_auto"
+
+
+# ---------- giá trị NaN, đầu vào API sai dạng ----------
+def test_nan_reading_is_an_error_not_a_value(cfg, monkeypatch):
+    """float32 0x7FC00000 ("không có dữ liệu" của nhiều đồng hồ): trước đây thành giá trị tốt, cảnh báo
+    mức pin < 20 không bao giờ bật và JSON có NaN làm hỏng cả trang."""
+    import collector
+    real = Connections._read
+    monkeypatch.setattr(Connections, "_read",
+                        lambda self, d, p: float("nan") if p["name"] == "muc_pin" else real(self, d, p))
+    c = Connections()
+    try:
+        poll_once(c, cfg, device="bess-01")
+    finally:
+        c.close()
+    row = collector.LATEST["bess-01.muc_pin"]
+    assert not row["ok"] and row["value"] is None and row["code"] == "read.not_finite"
+    json.dumps(collector.snapshot(cfg), allow_nan=False)    # JSON hợp lệ
+
+
+@pytest.mark.parametrize("body", [{"point": ["bess-01.muc_pin"]}, {"device": 1}])
+def test_web_read_rejects_non_string_target(web, body):
+    code, r = call(web + "/api/read", body)
+    assert code == 400 and r["code"] == "api.bad_read_request"
+
+
+def test_web_write_rejects_boolean_value(web):
+    code, r = call(web + "/api/write", {"point": "bess-01.che_do", "value": True})
+    assert code == 400 and r["code"] == "api.bad_write_request"
+
+
+@pytest.mark.parametrize("length", ["-1", "abc", str(10 ** 9)])
+def test_web_bad_content_length_is_rejected_without_hanging(web, length):
+    import http.client
+    from urllib.parse import urlparse
+    u = urlparse(web)
+    conn = http.client.HTTPConnection(u.hostname, u.port, timeout=3)
+    try:
+        conn.putrequest("POST", "/api/write")
+        conn.putheader("Content-Length", length)
+        conn.endheaders()
+        assert conn.getresponse().status == 400
+    finally:
+        conn.close()
+
+
+def test_auto_loop_stops_when_web_stops(cfg):
+    import threading
+    c = Connections()
+    before = {t.ident for t in threading.enumerate()}
+    srv = serve(cfg, c, port=0)
+    started = [t for t in threading.enumerate() if t.ident not in before]
+    srv.shutdown()
+    c.close()
+    deadline = time.time() + 2
+    while any(t.is_alive() for t in started) and time.time() < deadline:
+        time.sleep(0.05)
+    assert not any(t.is_alive() for t in started)

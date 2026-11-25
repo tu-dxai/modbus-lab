@@ -11,7 +11,7 @@ kiểm thử đặt và đứng yên tới khi đổi; simulator ghi lại mọi
 "với đầu vào X, client có ghi đúng Y vào đúng thiết bị không". Thiết bị giả nói đủ bốn kiểu kết nối của container:
 **Modbus TCP** (đồng hồ điện sau gateway, pin BESS), **Modbus RTU** qua cổng serial ảo (đồng hồ RS-485), **SNMP**
 (UPS) và **BACnet/IP** (điều hòa CRAH, ghi kèm mức ưu tiên và nhả lệnh). Kèm collector mẫu có trang web, công cụ ghi
-có rào chắn và nhật ký kiểm toán, Telegraf thật (Docker) đọc thiết bị theo cấu hình sinh từ Point Map, bộ kiểm tra Point Map, sơ đồ DC (EPMS, BMS, edge, DCIM) và 330 bài kiểm thử
+có rào chắn và nhật ký kiểm toán, Telegraf thật (Docker) đọc thiết bị theo cấu hình sinh từ Point Map, bộ kiểm tra Point Map, sơ đồ DC (EPMS, BMS, edge, DCIM) và 375 bài kiểm thử
 tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng Nhật**.
 
 エッジソフトウェアを**実機に触れる前に**検証するためのテストベンチです。シミュレーターが機器の役を務め、値はテスト担当者が
@@ -20,7 +20,7 @@ tự động. Hai trang web hiển thị song ngữ **tiếng Việt / tiếng N
 すべて話します：**Modbus TCP**（ゲートウェイ配下の電力計、BESS 蓄電池）、仮想シリアルポート経由の **Modbus RTU**
 （RS-485 電力計）、**SNMP**（UPS）、**BACnet/IP**（空調機 CRAH。優先度付き書き込みと指令の解除）。さらに Web 画面付きの
 サンプルコレクター、ガードと監査ログ付きの書き込みツール、Point Map から生成した設定で機器を読む実際の Telegraf（Docker）、
-Point Map チェッカー、DC 構成図（EPMS、BMS、エッジ、DCIM）、330 件の自動テストを含みます。2 つの Web 画面は
+Point Map チェッカー、DC 構成図（EPMS、BMS、エッジ、DCIM）、375 件の自動テストを含みます。2 つの Web 画面は
 **ベトナム語／日本語**の 2 言語表示です。
 
 ## Có gì trong thư mục<br>フォルダー構成
@@ -55,11 +55,11 @@ Point Map チェッカー、DC 構成図（EPMS、BMS、エッジ、DCIM）、33
 | `tools/dashboard/collector.html` | Trang web của collector: số liệu theo thiết bị, xu hướng, cảnh báo, nút ghi qua rào chắn<br>コレクターの Web 画面：機器ごとの計測値、トレンド、警報、ガード経由の書き込みボタン |
 | `tools/web/ui.css`, `ui.js` | Giao diện dùng chung cho hai trang: bố cục một màn hình, cột thiết bị, bảng, màu trạng thái<br>2 つの画面の共通 UI：1 画面レイアウト、機器一覧、表、状態色 |
 | `tests/acceptance/` | 20 bài kiểm thử nghiệm thu, mã MB-xx khớp tài liệu nghiên cứu<br>受け入れテスト 20 件。MB-xx の番号は調査資料と一致 |
-| `tests/point_map/` | 68 bài kiểm thử bộ kiểm tra Point Map và môi trường, mỗi loại lỗi một bài<br>Point Map と環境のチェッカーのテスト 68 件。エラーの種類ごとに 1 件 |
-| `tests/simulator/` | 156 bài kiểm thử simulator: đặt giá trị, tự thay đổi, bật/tắt thiết bị, sơ đồ DC, nhật ký lệnh ghi, khung tin thô (cả SNMP, BACnet), RTU, SNMP, BACnet<br>シミュレーターのテスト 156 件：値の設定、自動変化、機器の電源オン／オフ、DC 構成図、書き込みログ、生フレーム（SNMP、BACnet を含む）、RTU、SNMP、BACnet |
-| `tests/tools/` | 57 bài kiểm thử collector: đọc khi bấm, tự đọc, ghi, nhả lệnh BACnet, khung tin phía client, nguồn Telegraf (chạy Telegraf thật), song ngữ<br>コレクターのテスト 57 件：手動読み取り、自動読み取り、書き込み、BACnet の指令解除、クライアント側フレーム、Telegraf ソース（実際の Telegraf を起動）、2 言語表示 |
+| `tests/point_map/` | 81 bài kiểm thử bộ kiểm tra Point Map và môi trường, mỗi loại lỗi một bài<br>Point Map と環境のチェッカーのテスト 81 件。エラーの種類ごとに 1 件 |
+| `tests/simulator/` | 165 bài kiểm thử simulator: đặt giá trị, tự thay đổi, bật/tắt thiết bị, sơ đồ DC, nhật ký lệnh ghi, khung tin thô (cả SNMP, BACnet), RTU, SNMP, BACnet<br>シミュレーターのテスト 165 件：値の設定、自動変化、機器の電源オン／オフ、DC 構成図、書き込みログ、生フレーム（SNMP、BACnet を含む）、RTU、SNMP、BACnet |
+| `tests/tools/` | 70 bài kiểm thử collector: đọc khi bấm, tự đọc, ghi, nhả lệnh BACnet, khung tin phía client, nguồn Telegraf (chạy Telegraf thật), song ngữ<br>コレクターのテスト 70 件：手動読み取り、自動読み取り、書き込み、BACnet の指令解除、クライアント側フレーム、Telegraf ソース（実際の Telegraf を起動）、2 言語表示 |
 | `tests/telegraf/` | 9 bài kiểm thử cấu hình Telegraf sinh ra (chỉ kiểm cấu trúc, chưa chạy Telegraf thật)<br>生成された Telegraf 設定のテスト 9 件（構造のみ検証、実際の Telegraf は起動しない） |
-| `tests/write_service/` | 8 bài kiểm thử nhật ký kiểm toán: ghi được, bị chặn, bị từ chối, ghi từ web<br>監査ログのテスト 8 件：書き込み成功、ガードで遮断、機器が拒否、Web からの書き込み |
+| `tests/write_service/` | 18 bài kiểm thử rào chắn và nhật ký kiểm toán: ghi được, bị chặn, bị từ chối, ghi từ web, giá trị lẻ hơn hệ số, BACnet nhả lệnh khi ghi thất bại, nhật ký lỗi<br>ガードと監査ログのテスト 18 件：書き込み成功、ガードで遮断、機器が拒否、Web からの書き込み、係数より細かい値、書き込み失敗時の BACnet 指令解除、監査ログの障害 |
 | `tests/translations/` | 12 bài kiểm thử từ điển: đủ vi và ja, khớp tham số, mọi khóa trang web và code dùng đều có<br>辞書のテスト 12 件：vi と ja がそろっている、パラメーターが一致、画面とコードが使う全キーが存在 |
 | `tests/conftest.py` | Bật simulator kiểm thử (môi trường lab, cổng 5021), dùng chung cho mọi bài<br>テスト用シミュレーター（lab 環境、ポート 5021）を起動。全テストで共用 |
 
@@ -74,12 +74,12 @@ import します。モジュールの検索パスは `Makefile`（`PYTHONPATH`�
 **Yêu cầu:** Linux (hoặc WSL2 trên Windows), Python **3.10 trở lên** (pymodbus 3.16.2 cần), `git`, `make`,
 `python3-venv`, và mạng để tải thư viện lần đầu. Đã thử trên Ubuntu 24.04 / Python 3.12.
 Thư viện (ghim phiên bản trong `requirements.txt`): pymodbus 3.16.2, pyserial 3.5 (RTU), pysnmp 7.1.32 (SNMP),
-bacpypes3 0.0.110 (BACnet), pyyaml, pytest.
+bacpypes3 0.0.110 (BACnet), pyyaml, pytest, tomli (chỉ cài trên Python 3.10).
 
 **要件：** Linux（または Windows 上の WSL2）、Python **3.10 以上**（pymodbus 3.16.2 の要件）、`git`、`make`、
 `python3-venv`、初回のライブラリ取得用のネットワーク。Ubuntu 24.04 / Python 3.12 で動作確認済み。
 ライブラリ（`requirements.txt` でバージョン固定）：pymodbus 3.16.2、pyserial 3.5（RTU）、pysnmp 7.1.32（SNMP）、
-bacpypes3 0.0.110（BACnet）、pyyaml、pytest。
+bacpypes3 0.0.110（BACnet）、pyyaml、pytest、tomli（Python 3.10 のみ）。
 
 ```bash
 git clone git@github.com:tu-dxai/modbus-lab.git
@@ -223,7 +223,7 @@ Collector **tự tìm thiết bị qua simulator đang chạy**:
 - Collector hỏi trang điều khiển của simulator (mặc định `http://127.0.0.1:5080`, đổi bằng `SIM_URL`) xem từng thiết bị đang nghe ở đâu.
 - Vì vậy đọc được cả simulator chạy bằng `make sim` (127.0.1.x) lẫn simulator trong Docker của demo A04 (đúng IP site 10.20.0.x).
 - Với simulator trong Docker, thiết bị RS-485 bị bỏ qua và có ghi lý do: cổng serial nằm trong container. Collector không mở cổng serial thật của máy này.
-- Không kết nối được simulator thì collector tạm dùng `environments/lab.yml`.
+- Không kết nối được simulator thì collector tạm dùng `environments/lab.yml` — cả khi simulator đang chạy rồi dừng: collector không giữ địa chỉ simulator cũ (simulator Docker báo địa chỉ site thật).
 - Mỗi lượt đọc, collector hỏi lại simulator. Simulator chạy sau collector, hay khởi động lại ở chỗ khác (`make sim` ↔ Docker), thì collector tự theo kịp, không cần khởi động lại.
 - Muốn cố định môi trường: `ARGS="--env lab"` hoặc `ARGS="--env site"` (thiết bị thật).
 
@@ -231,7 +231,7 @@ Collector **tự tìm thiết bị qua simulator đang chạy**:
 - コレクターはシミュレーターの制御画面（デフォルト `http://127.0.0.1:5080`、`SIM_URL` で変更）に、各機器がどこで待ち受けているかを問い合わせます。
 - そのため `make sim` で動くシミュレーター（127.0.1.x）も、デモ A04 の Docker 内シミュレーター（サイトと同じ IP 10.20.0.x）も読めます。
 - Docker 内のシミュレーターの場合、RS-485 機器は理由を記録したうえでスキップします：シリアルポートがコンテナ内にあるためです。コレクターはこの PC の実シリアルポートを開きません。
-- シミュレーターに接続できないときは、一時的に `environments/lab.yml` を使います。
+- シミュレーターに接続できないときは、一時的に `environments/lab.yml` を使います — 稼働中のシミュレーターが停止した場合も同様で、古いシミュレーターのアドレスは保持しません（Docker のシミュレーターはサイトの実アドレスを返すため）。
 - 巡回ごとにシミュレーターへ問い合わせ直します。シミュレーターがコレクターより後に起動しても、別の場所で再起動しても（`make sim` ↔ Docker）、コレクターは再起動なしで自動的に追従します。
 - 環境を固定する場合：`ARGS="--env lab"` または `ARGS="--env site"`（実機）。
 
@@ -286,13 +286,29 @@ make write P=dong-ho-dien-01.dien_ap V=999   # bị chặn: điểm chỉ đọc
 make audit                             # ai ghi gì, vào đâu, lúc nào, kết quả (kể cả lệnh bị chặn) / 誰が・何を・どこへ・いつ書いたか、結果（遮断されたものを含む）
 ```
 
-Mọi lệnh ghi — từ `make write` (`cli:<user>`) hay từ trang collector (`web:<ip>`) — để lại một dòng JSON trong
+Mọi lệnh ghi — từ `make write` (`cli:<user>`) hay từ trang collector (`web:<ip>`) — để lại dòng JSON trong
 `var/audit/writes.jsonl`: thời điểm, người ghi, môi trường, điểm, địa chỉ thật, giá trị, kết quả
-(`written` / `released` / `blocked` / `failed`), giá trị trước và sau, mức ưu tiên BACnet, mã lỗi. File chỉ ghi thêm.
+(`attempt` / `written` / `released` / `blocked` / `failed`), giá trị trước và sau, mức ưu tiên BACnet, mã lỗi. File chỉ ghi thêm.
+Lệnh được gửi tới thiết bị có hai dòng: `attempt` ngay trước khi gửi (không ghi được dòng này thì lệnh **không được gửi**),
+rồi dòng kết quả. Thiết bị đã đổi mà không ghi được dòng kết quả thì báo rõ "ĐÃ ghi vào thiết bị… đừng ghi lại lần nữa"
+(web trả 500 kèm `"written": true`), không báo là ghi thất bại.
+
+Rào chắn chỉ cho ghi giá trị thiết bị lưu đúng được: điểm số nguyên có hệ số 0.1 nhận 21.3 nhưng chặn 21.35 (không làm
+tròn ngầm). Đọc lại so với đúng số thiết bị lưu (float32 / BACnet REAL: 21.3 lưu thành 21.299999). BACnet: lệnh đã gửi
+mà không xác nhận được (không trả lời, đọc lại không khớp vì mức ưu tiên cao hơn đang giữ) thì nhả lệnh ngay ở mức đó,
+để nó không âm thầm có hiệu lực khi mức cao hơn nhả ra; nhật ký ghi `relinquished`.
 
 すべての書き込みは — `make write`（`cli:<user>`）からでもコレクター画面（`web:<ip>`）からでも — `var/audit/writes.jsonl` に
-JSON を 1 行残します：日時、書き込み者、環境、計測点、実アドレス、値、結果（`written` / `released` / `blocked` / `failed`）、
+JSON 行を残します：日時、書き込み者、環境、計測点、実アドレス、値、結果（`attempt` / `written` / `released` / `blocked` / `failed`）、
 書き込み前後の値、BACnet の優先度、エラーコード。ファイルは追記のみです。
+機器へ送るコマンドは 2 行になります：送信直前の `attempt`（この行を記録できなければコマンドは**送信しません**）と結果の行です。
+機器は変わったのに結果の行を記録できない場合は「機器への書き込みは完了しました…再度書き込まないでください」と明示し
+（Web は `"written": true` 付きで 500 を返す）、書き込み失敗とは報告しません。
+
+ガードは機器が正確に保存できる値だけを許可します：係数 0.1 の整数型の計測点は 21.3 を受け付けますが、21.35 は遮断します
+（暗黙の丸めはしません）。読み戻しは機器が実際に保存する値と比較します（float32 / BACnet REAL では 21.3 が 21.299999 になる）。
+BACnet：送信したのに確認できなかったコマンド（無応答、より高い優先度が値を保持していて読み戻し不一致）は、その優先度で
+すぐに解除します。高い優先度が解除されたときに黙って有効にならないようにするためで、ログには `relinquished` を記録します。
 
 **4. Chạy kiểm thử tự động<br>自動テストを実行** (không cần bật simulator, test tự bật ở cổng 5021 / シミュレーターの起動は不要、テストがポート 5021 で自動起動)
 
@@ -644,7 +660,7 @@ Demo A04 dùng cách này để bus RS-485 của simulator trong Docker đọc �
 | MB-05 | Đọc ô không tồn tại → mã lỗi 02<br>存在しないレジスタを読む → 例外コード 02 |
 | MB-06 | Hỏi sai số thiết bị → lỗi<br>誤った機器番号に問い合わせる → エラー |
 | MB-07 | Mất kết nối → collector báo lỗi từng điểm, không sập<br>通信断 → コレクターは計測点ごとにエラーを報告し、落ちない |
-| MB-10 | Ghi hợp lệ và đọc lại; rào chắn chặn ghi sai (ngoài `allowed`, ngoài `[min, max]`, điểm ghi được mà không khai giới hạn); thiết bị tự từ chối ghi ô chỉ đọc<br>正しい書き込みと読み戻し。ガードが誤った書き込みを遮断（`allowed` 外、`[min, max]` 外、制限未定義の書き込み可能点）。読み取り専用レジスタへの書き込みは機器自身が拒否 |
+| MB-10 | Ghi hợp lệ và đọc lại; rào chắn chặn ghi sai (ngoài `allowed`, ngoài `[min, max]`, điểm ghi được mà không khai giới hạn, lẻ hơn hệ số); thiết bị tự từ chối ghi ô chỉ đọc<br>正しい書き込みと読み戻し。ガードが誤った書き込みを遮断（`allowed` 外、`[min, max]` 外、制限未定義の書き込み可能点、係数より細かい値）。読み取り専用レジスタへの書き込みは機器自身が拒否 |
 | Point Map | Ô nhớ đè nhau (tính cả kiểu 32 bit chiếm 2 ô), byte_order sai, type sai, điểm ghi được thiếu giới hạn, thiếu unit, thiếu trường bắt buộc; host/port/device_id/timeout sai; trùng device_id hoặc khác timeout sau cùng gateway; file môi trường thiếu, thừa, trùng địa chỉ; simulator và collector từ chối khởi động<br>レジスタの重なり（32 ビット型が 2 レジスタを占めることも考慮）、byte_order の誤り、type の誤り、書き込み可能点の制限漏れ、unit の欠落、必須項目の欠落。host/port/device_id/timeout の誤り。同一ゲートウェイ配下での device_id 重複や timeout の不一致。環境ファイルのアドレスの不足・過剰・重複。シミュレーターとコレクターが起動を拒否 |
 | Mạng<br>ネットワーク | Gateway phục vụ nhiều thiết bị theo device_id; cùng device_id ở hai địa chỉ là hai thiết bị; thiết bị cùng gateway dùng chung kết nối; một địa chỉ mất kết nối không ảnh hưởng địa chỉ khác<br>ゲートウェイが device_id で複数機器に応答。2 つのアドレスの同じ device_id は別の機器。同じゲートウェイの機器は接続を共有。1 つのアドレスの通信断は他のアドレスに影響しない |
 | Simulator<br>シミュレーター | Giá trị đứng yên; đặt giá trị rồi đọc lại qua Modbus đúng kiểu, byte order, hệ số; đặt sai thì không đổi gì; nhật ký ghi lại lệnh được nhận, lệnh vào ô chỉ đọc, ô không khai báo, sai device_id; chờ lệnh ghi; dòng lệnh<br>値が固定される。値を設定して Modbus で読み戻すと型、バイト順、係数が正しい。誤った設定では何も変わらない。ログが受理された書き込み、読み取り専用レジスタ・未定義レジスタ・誤った device_id への書き込みを記録。書き込みの待機。コマンドライン |
@@ -658,7 +674,7 @@ Demo A04 dùng cách này để bus RS-485 của simulator trong Docker đọc �
 | BACnet | Point Map (đối tượng, priority, client); đọc analog/binary; ghi kèm priority rồi nhả lệnh; thiết bị từ chối ghi input; simulator ghi nhận lệnh<br>Point Map（オブジェクト、priority、client）。analog/binary の読み取り。priority 付き書き込みと指令の解除。機器が input への書き込みを拒否。シミュレーターがコマンドを記録 |
 | Telegraf thật<br>実際の Telegraf | Telegraf 1.32 trong Docker đọc mọi điểm Modbus TCP, RTU qua TCP, SNMP đúng như simulator; BACnet vẫn Python; đặt giá trị tới được Telegraf; thiết bị tắt thành "cũ"; tắt collector bằng SIGTERM gỡ container<br>Docker 内の Telegraf 1.32 が Modbus TCP、TCP 経由の RTU、SNMP の全計測点をシミュレーターどおりに読む。BACnet は Python のまま。設定した値が Telegraf に届く。オフの機器は「古い」扱い。SIGTERM でコレクターを止めるとコンテナが削除される |
 | Telegraf | Một khối cho mỗi kết nối; TCP và RTU; byte order, slave_id, scale; SNMP; bỏ qua BACnet<br>接続ごとに 1 ブロック。TCP と RTU。バイト順、slave_id、scale。SNMP。BACnet はスキップ |
-| Kiểm toán<br>監査 | Ghi được, bị chặn, bị thiết bị từ chối, nhả lệnh; ghi từ web kèm địa chỉ người ghi<br>書き込み成功、遮断、機器による拒否、指令の解除。Web からの書き込みは書き込み者のアドレス付き |
+| Kiểm toán<br>監査 | Dòng `attempt` trước khi gửi; ghi được, bị chặn, bị thiết bị từ chối, nhả lệnh; ghi từ web kèm địa chỉ người ghi; không ghi được nhật ký thì không gửi lệnh; ghi xong mà nhật ký lỗi thì báo thiết bị đã đổi<br>送信前の `attempt` 行。書き込み成功、遮断、機器による拒否、指令の解除。Web からの書き込みは書き込み者のアドレス付き。ログに記録できなければ送信しない。書き込み後にログが失敗したら機器が変わったことを報告 |
 | Bản dịch<br>翻訳 | Mỗi khóa đủ vi và ja, cùng tham số; mọi khóa trang web và code dùng đều có; xuất bảng duyệt<br>各キーに vi と ja がそろい、パラメーターが同じ。画面とコードが使う全キーが存在。レビュー表の出力 |
 
 ## Bài tập gợi ý<br>練習課題
@@ -726,6 +742,9 @@ không thừa, không hai địa chỉ trỏ chung một chỗ.
 - Mỗi điểm có `name`, `table` (`holding` hoặc `input`), `address`, `type` (`int16`, `uint16`, `int32`, `uint32`, `float32`) và `unit` (để `""` nếu không có đơn vị).
 - Hai điểm cùng thiết bị, cùng bảng không được đè ô nhớ của nhau; kiểu 32 bit chiếm 2 ô liền nhau.
 - Điểm `writable: true` phải có `allowed: [...]`, hoặc có đủ `min` và `max` (min ≤ max). Rào chắn ghi chặn mọi giá trị ngoài giới hạn đó.
+- `address` là số nguyên 0–65535 (kiểu 32 bit: tới 65534); `scale` là số khác 0. Chỉ điểm `holding` mới `writable`.
+  Mỗi giá trị trong `allowed`, `min`, `max` và `sim.base` phải lưu đúng được vào thanh ghi: vừa kiểu dữ liệu, và với kiểu
+  số nguyên thì là bội số của `scale`.
 - **Sơ đồ DC (tùy chọn):** `system:` là `EPMS` hoặc `BMS`. `topology.power`: mỗi nút có `id` không trùng, `kind`
   (`grid`, `panel`, `ups`, `battery`, `load`, `cooling`), `from` trỏ tới nút có thật và không tạo vòng; `device` / `meters`
   trỏ tới thiết bị có thật, mỗi thiết bị ở tối đa một nút; `show` là điểm của thiết bị đó; nút không gắn thiết bị
@@ -735,7 +754,7 @@ không thừa, không hai địa chỉ trỏ chung một chỗ.
 - **SNMP:** `protocol: snmp`, `snmp: { version: "1" | "2c", community }`; mỗi điểm có `oid` (không trùng), `type`
   (`integer`, `gauge32`, `counter32`), chỉ đọc.
 - **BACnet:** `protocol: bacnet`, `device_instance` 0–4194302 (không trùng trong site); mỗi điểm có `object` dạng
-  `loại,số` (không trùng); điểm ghi được chỉ là `*-value` / `*-output`, có `priority` 1–16, binary chỉ cho 0/1.
+  `loại,số` (không trùng); điểm ghi được chỉ là `*-value` / `*-output`, có `priority` 1–16, binary dùng `allowed: [0, 1]` (không dùng min/max).
   Site có thiết bị BACnet phải khai `bacnet: { client: "IP/mask:cổng" }`.
 
 - 各機器と各計測点には空でない `label: { vi: "...", ja: "..." }` が必要です。各警報には `message: { vi, ja }` が必要で、
@@ -744,6 +763,8 @@ không thừa, không hai địa chỉ trỏ chung một chỗ.
 - 各計測点には `name`、`table`（`holding` または `input`）、`address`、`type`（`int16`、`uint16`、`int32`、`uint32`、`float32`）、`unit`（単位がなければ `""`）が必要です。
 - 同じ機器・同じテーブルの 2 つの計測点はレジスタが重なってはいけません。32 ビット型は連続する 2 レジスタを占めます。
 - `writable: true` の計測点には `allowed: [...]`、または `min` と `max` の両方（min ≤ max）が必要です。書き込みガードはその範囲外の値をすべて遮断します。
+- `address` は 0–65535 の整数（32 ビット型は 65534 まで）、`scale` は 0 以外の数値です。`writable` にできるのは `holding` の計測点のみです。
+  `allowed`、`min`、`max`、`sim.base` の各値はレジスタに正確に保存できること：データ型に収まり、整数型では `scale` の倍数であること。
 - **DC 構成図（任意）：** `system:` は `EPMS` または `BMS`。`topology.power`：各ノードは重複しない `id`、`kind`
   （`grid`、`panel`、`ups`、`battery`、`load`、`cooling`）を持ち、`from` は実在するノードを指してループを作らないこと。`device` / `meters`
   は実在する機器を指し、各機器は最大 1 つのノードにのみ属します。`show` はその機器の計測点です。機器を持たないノードには
@@ -753,17 +774,19 @@ không thừa, không hai địa chỉ trỏ chung một chỗ.
 - **SNMP：** `protocol: snmp`、`snmp: { version: "1" | "2c", community }`。各計測点には `oid`（重複なし）、`type`
   （`integer`、`gauge32`、`counter32`）が必要で、読み取り専用です。
 - **BACnet：** `protocol: bacnet`、`device_instance` 0–4194302（サイト内で重複なし）。各計測点の `object` は `種類,番号` 形式
-  （重複なし）。書き込み可能なのは `*-value` / `*-output` のみで、`priority` 1–16 が必要。binary は 0/1 のみ。
+  （重複なし）。書き込み可能なのは `*-value` / `*-output` のみで、`priority` 1–16 が必要。binary は `allowed: [0, 1]` を使う（min/max は不可）。
   BACnet 機器のあるサイトでは `bacnet: { client: "IP/mask:ポート" }` の記述が必要です。
 
 ## Lưu ý<br>注意事項
 
 - **Simulator nghiêm ngặt hơn nhiều thiết bị thật:** ô không khai báo trong Point Map luôn trả mã lỗi 02. Nếu một công cụ đọc gộp nhiều ô liền nhau mà đi qua ô trống, nó sẽ bị lỗi — điều này cũng xảy ra với một số thiết bị thật.
 - **Hỏi sai số thiết bị**, simulator trả mã lỗi 04; thiết bị thật thường **im lặng tới khi hết thời gian chờ**. Simulator chỉ đúng bằng mô tả dùng để dựng nó.
+- Thiết bị trả NaN / vô cực (float32 `0x7FC00000`, nhiều đồng hồ dùng cho "không có dữ liệu") thì collector báo **lỗi đọc**, không coi là số đo — cảnh báo so sánh với NaN luôn sai. Simulator cũng không nhận đặt NaN.
 - Simulator mở Modbus ở các IP loopback `127.0.1.x` (Linux dùng được cả dải `127.x.x.x` không cần cấu hình; macOS phải thêm alias cho `lo0`).
 - Cổng 5020, 5080 hoặc 8080 đang bận thì báo lỗi khi khởi động — tắt chương trình đang dùng cổng đó, hoặc đổi địa chỉ trong `edge/point-map/environments/lab.yml` (Modbus), `make sim ARGS="--control-port ..."` (điều khiển), `make collect ARGS="--web-port ..."` (trang xem).
 
 - **シミュレーターは多くの実機より厳格です：** Point Map で定義していないレジスタは常に例外コード 02 を返します。連続する複数レジスタをまとめて読むツールが空きレジスタをまたぐとエラーになります — 一部の実機でも同じことが起こります。
 - **誤った機器番号に問い合わせると**、シミュレーターは例外コード 04 を返しますが、実機は多くの場合**タイムアウトまで無応答**です。シミュレーターは、それを作るのに使った仕様の分だけしか正確ではありません。
+- 機器が NaN／無限大（float32 `0x7FC00000`。多くの電力計が「データなし」に使う）を返すと、コレクターは計測値ではなく**読み取りエラー**として扱います — NaN との比較では警報が常に成立しないためです。シミュレーターも NaN の設定を受け付けません。
 - シミュレーターはループバック IP `127.0.1.x` で Modbus を開きます（Linux は `127.x.x.x` の全範囲を設定なしで使えます。macOS は `lo0` へのエイリアス追加が必要）。
 - ポート 5020、5080、8080 が使用中だと起動時にエラーになります — そのポートを使っているプログラムを止めるか、`edge/point-map/environments/lab.yml`（Modbus）、`make sim ARGS="--control-port ..."`（制御）、`make collect ARGS="--web-port ..."`（表示画面）でアドレスを変更してください。

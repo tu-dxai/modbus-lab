@@ -89,6 +89,7 @@ def power_guard(state, devs: list[dict], silent: bool, witness):
         name = None if sending else names.get(pdu.dev_id)
         if name is not None and not state.is_on(name):
             if silent:
+                witness.unanswered(pdu)                # không ai trả lời, nhưng nhân chứng vẫn ghi lại lệnh ghi
                 return None
             witness(False, pdu)                        # nhân chứng vẫn thấy lệnh, và phản hồi 0B
             return _GatewayNoResponse(pdu)

@@ -48,6 +48,17 @@ class Control(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def raw_body(self) -> bytes:
+        """Thân yêu cầu. Content-Length sai (không phải số, âm, quá 1 MB) -> ValueError, không đọc gì:
+        read(-1) sẽ treo luồng tới khi client đóng kết nối."""
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            raise ValueError("Content-Length") from None
+        if not 0 <= n <= 1 << 20:
+            raise ValueError("Content-Length")
+        return self.rfile.read(n)
+
     def not_found(self) -> None:
         self.reply(404, {"ok": False, **ApiError("api.not_found").as_json()})
 
@@ -101,7 +112,7 @@ class Control(BaseHTTPRequestHandler):
         if path != "/api/state":
             return self.not_found()
         try:
-            values = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)))
+            values = json.loads(self.raw_body())
             if not isinstance(values, dict) or not values:
                 raise ValueError
         except ValueError:
@@ -117,7 +128,7 @@ class Control(BaseHTTPRequestHandler):
 
     def set_power(self):
         try:
-            req = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)))
+            req = json.loads(self.raw_body())
             name, on = req["device"], req["on"]
             if not isinstance(name, str) or not isinstance(on, bool):
                 raise ValueError
@@ -132,7 +143,7 @@ class Control(BaseHTTPRequestHandler):
 
     def set_auto(self):
         try:
-            raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            raw = self.raw_body()
             interval = json.loads(raw).get("interval")
             ok = isinstance(interval, int) and not isinstance(interval, bool) and (
                 interval == 0 or 1 <= interval <= SimState.AUTO_MAX)

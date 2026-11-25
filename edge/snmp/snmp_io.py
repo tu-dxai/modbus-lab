@@ -27,7 +27,10 @@ async def _get(d: dict, oid: str, frames=None):
 def read_snmp(d: dict, p: dict, frames=None) -> float:
     """frames: FrameLog của collector để ghi khung tin thô (None = không ghi)."""
     timeout = d.get("timeout", DEFAULT_TIMEOUT)
-    err, status, _, var_binds = async_bridge.run(_get(d, p["oid"], frames), timeout + 2)
+    try:
+        err, status, _, var_binds = async_bridge.run(_get(d, p["oid"], frames), timeout + 2)
+    except TimeoutError:                               # cả vòng chờ ngoài cũng hết giờ: như không trả lời
+        err = True
     if err:
         raise ReadError("read.snmp_no_answer", endpoint=f"{d['host']}:{d['port']}", s=timeout)
     if int(status):
