@@ -1,6 +1,7 @@
 """Kiểm thử nhật ký kiểm toán lệnh ghi (edge/write-service/audit.py).
 
-Mọi lệnh ghi đi qua rào chắn đều để lại một dòng: đã ghi, bị rào chắn chặn, hay bị thiết bị từ chối.
+Mọi lệnh ghi đi qua rào chắn đều để lại dấu: lệnh gửi tới thiết bị có dòng "attempt" trước khi gửi rồi dòng
+kết quả (đã ghi, bị thiết bị từ chối); lệnh bị rào chắn chặn có một dòng "blocked".
 """
 import copy, json, urllib.error, urllib.request
 import pytest
@@ -18,7 +19,10 @@ def log(tmp_path):
 def test_successful_write_is_audited(cfg, conns, log):
     write_guarded(cfg, conns, "bess-01.che_do", 1, audit=log, actor="cli:tester")
     write_guarded(cfg, conns, "bess-01.che_do", 0, audit=log, actor="cli:tester")
-    first = log.tail()[0]
+    rows = log.tail()
+    assert [r["outcome"] for r in rows] == ["attempt", "written", "attempt", "written"]
+    attempt, first = rows[0], rows[1]
+    assert attempt["value"] == 1 and attempt["before"] == 0 and attempt["after"] is None   # ghi trước khi gửi
     assert first["outcome"] == "written" and first["actor"] == "cli:tester"
     assert first["point"] == "bess-01.che_do" and first["device"] == "bess-01"
     assert first["site_endpoint"] == "10.20.0.30:502" and first["env"] == "lab"
@@ -45,7 +49,8 @@ def test_device_rejection_is_audited(cfg, conns, log):
     p.update(writable=True, min=0, max=300)              # Point Map cho ghi, nhưng thiết bị coi ô này chỉ đọc
     with pytest.raises(WriteFailed):
         write_guarded(c, conns, "dong-ho-dien-01.dien_ap", 231, audit=log, actor="cli:tester")
-    (e,) = log.tail()
+    attempt, e = log.tail()
+    assert attempt["outcome"] == "attempt"
     assert e["outcome"] == "failed" and e["code"] == "write.device_rejected"
     assert e["before"] == pytest.approx(230.0)
 
@@ -78,5 +83,5 @@ def test_web_write_is_audited_with_client_address(cfg, tmp_path):
     srv.shutdown()
     c.close()
     entries = log.tail()
-    assert [e["outcome"] for e in entries] == ["written", "written"]
+    assert [e["outcome"] for e in entries] == ["attempt", "written", "attempt", "written"]
     assert all(e["actor"] == "web:127.0.0.1" for e in entries)

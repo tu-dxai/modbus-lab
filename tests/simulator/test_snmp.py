@@ -2,7 +2,11 @@
 
 Thiết bị mẫu ups-01 dùng OID chuẩn UPS-MIB (RFC 1628). Simulator chung ở tests/conftest.py.
 """
-import asyncio, copy, tomllib
+import asyncio, copy
+try:
+    import tomllib
+except ModuleNotFoundError:                        # Python 3.10
+    import tomli as tomllib
 import pytest
 from pysnmp.hlapi.v3arch.asyncio import (CommunityData, ContextData, ObjectIdentity, ObjectType, SnmpEngine,
                                           UdpTransportTarget, get_cmd)

@@ -100,7 +100,7 @@ def test_write_setpoint_with_priority_then_relinquish(cfg, conns, tmp_path):
     assert (before, after) == (pytest.approx(18.0), pytest.approx(21.5))
     released = relinquish_guarded(cfg, conns, f"{CRAH}.diem_dat_nhiet", audit=log, actor="t")
     assert released == pytest.approx(18.0)                     # về giá trị mặc định của thiết bị
-    assert [e["outcome"] for e in log.tail()] == ["written", "released"]
+    assert [e["outcome"] for e in log.tail()] == ["attempt", "written", "attempt", "released"]
     assert log.tail()[1]["priority"] == 8
 
 
@@ -132,3 +132,39 @@ def test_bacnet_write_is_witnessed_by_simulator(cfg, conns, sim_ctl):
     writes = sim_ctl.writes(point=f"{CRAH}.diem_dat_nhiet", since=mark)
     assert [w["points"][0]["value"] for w in writes] == [20.0, None]
     assert all(w["accepted"] and w["priority"] == 8 for w in writes)
+
+
+# ---------- đặt bằng tay = đổi giá trị mặc định, không chiếm mức ưu tiên 16 ----------
+def test_every_manual_set_reaches_bacnet_clients(cfg, conns, sim_ctl):
+    """Trước đây lần đặt đầu tiên chiếm ô ưu tiên 16, nên từ lần thứ hai client vẫn đọc số cũ."""
+    key = f"{CRAH}.diem_dat_nhiet"
+    d, p = find(cfg, key)
+    sim_ctl.reset()
+    for v in (20.0, 22.0, 19.5):
+        sim_ctl.set(key, v)
+        assert conns.read(d, p) == pytest.approx(v)
+    sim_ctl.reset()
+    sim_ctl.set(key, 25.0)
+    assert conns.read(d, p) == pytest.approx(25.0)
+    write_guarded(cfg, conns, key, 21.0)
+    assert relinquish_guarded(cfg, conns, key) == pytest.approx(25.0)   # về giá trị mặc định mới nhất
+
+
+def test_manual_set_while_commanded_reports_commanded_value(cfg, conns, sim_ctl):
+    """Đang có lệnh ở mức 8: đặt tay chỉ đổi giá trị mặc định; trang simulator báo đúng số thiết bị đang trả."""
+    key = f"{CRAH}.diem_dat_nhiet"
+    sim_ctl.reset()
+    write_guarded(cfg, conns, key, 21.0)
+    sim_ctl.set(key, 24.0)
+    assert sim_ctl.get(key)["value"] == pytest.approx(21.0)
+    assert relinquish_guarded(cfg, conns, key) == pytest.approx(24.0)
+
+
+def test_rejected_write_to_commandable_point_is_logged(cfg, sim_ctl):
+    from bacnet_io import BacnetRejected, write_bacnet
+    d, p = find(cfg, f"{CRAH}.diem_dat_nhiet")
+    mark = sim_ctl.last_seq()
+    with pytest.raises(BacnetRejected):
+        write_bacnet(d, dict(p, priority=17), 21.0)              # chỉ có 16 mức ưu tiên
+    (w,) = sim_ctl.writes(since=mark)
+    assert not w["accepted"] and w["priority"] == 17 and w["exception"]

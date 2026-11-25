@@ -9,7 +9,7 @@ Mỗi lệnh ghi (nhận hay bị từ chối) vào nhật ký lệnh ghi của 
 
 Client phải gửi từ cổng khác cổng thiết bị (cùng cổng trên cùng máy thì gói tin vòng về chính client).
 """
-import asyncio, logging, threading
+import asyncio, concurrent.futures, logging, threading
 from bacpypes3.app import Application
 from bacpypes3.errors import ExecutionError
 from bacpypes3.local.analog import AnalogInputObject, AnalogOutputObject, AnalogValueObject
@@ -36,6 +36,12 @@ def _to_state(kind: str, value) -> float | int | None:
     if kind.startswith("binary"):
         return 1 if str(value) in ("active", "1") else 0
     return round(float(value), 6)
+
+
+def _error_name(e: BaseException) -> str:
+    """Tên lỗi BACnet ngắn gọn cho nhật ký, ví dụ invalid-array-index."""
+    code = getattr(e, "errorCode", None)
+    return str(code) if code is not None else (str(e) or type(e).__name__)
 
 
 def _to_bacnet(kind: str, value):
@@ -73,11 +79,17 @@ def _commandable_class(base):
     class Cmd(_Witnessed, Commandable, base):
         async def write_property(self, attr, value, index=None, priority=None):
             state, d, p, key, ep, site_ep = self._sim
-            if _attr(self, attr) != "presentValue":
-                return await super().write_property(attr, value, index, priority)
             kind = p["object"].split(",")[0]
+            if _attr(self, attr) != "presentValue":    # ví dụ relinquishDefault: presentValue có thể đổi theo
+                await super().write_property(attr, value, index, priority)
+                state.set_from_device(key, _to_state(kind, self.presentValue))
+                return
             before = _to_state(kind, self.presentValue)
-            await super().write_property(attr, value, index, priority)
+            try:
+                await super().write_property(attr, value, index, priority)
+            except BaseException as e:                 # thiết bị từ chối (priority sai, kiểu sai...): vẫn vào nhật ký
+                self._log(_to_state(kind, value), priority or 16, False, before, _error_name(e))
+                raise
             after = _to_state(kind, self.presentValue)
             state.set_from_device(key, after)
             self._log(_to_state(kind, value), priority or 16, True, before)
@@ -98,6 +110,7 @@ def start_device(state, d: dict) -> None:
 
     def run():
         async def main():
+            loop = asyncio.get_running_loop()
             objects = []
             for p in d["points"]:
                 kind, inst = bacnet_object(p["object"])
@@ -109,8 +122,11 @@ def start_device(state, d: dict) -> None:
                 obj = cls(objectIdentifier=(kind, inst), objectName=p["name"], presentValue=init, **extra)
                 obj._sim = (state, d, p, key, ep, site_ep)
                 if writable:                           # đặt bằng tay trên simulator = đổi giá trị mặc định
-                    state.on_set(key, lambda v, o=obj, k=kind: _set_default(o, k, v))
-                    state.reset_hooks.append(lambda o=obj, k=kind, key=key: _clear(o, k, state.values[key]))
+                    # luồng HTTP gọi các hàm này; đối tượng bacpypes thuộc vòng lặp của thiết bị nên chạy ở đó
+                    state.on_set(key, lambda v, o=obj, k=kind, key=key:
+                                 _on_loop(loop, lambda: _set_default(state, key, o, k, v)))
+                    state.reset_hooks.append(lambda o=obj, k=kind, key=key:
+                                             _on_loop(loop, lambda: _clear(state, key, o, k, state.values[key])))
                 objects.append(obj)
             dev = DeviceObject(objectIdentifier=("device", d["device_instance"]), objectName=d["name"],
                                vendorIdentifier=999)
@@ -133,20 +149,30 @@ def start_device(state, d: dict) -> None:
     ready.wait(5)
 
 
-def _set_default(obj, kind: str, value) -> None:
+def _on_loop(loop, fn):
+    """Chạy fn trên vòng lặp asyncio của thiết bị và chờ xong (gọi từ luồng khác)."""
+    done = concurrent.futures.Future()
+
+    def run():
+        try:
+            done.set_result(fn())
+        except BaseException as e:
+            done.set_exception(e)
+    loop.call_soon_threadsafe(run)
+    return done.result(5)
+
+
+def _set_default(state, key: str, obj, kind: str, value) -> None:
+    """Đổi relinquishDefault rồi tính lại presentValue theo mảng ưu tiên.
+
+    Không gán obj.presentValue: với đối tượng commandable của bacpypes3, gán presentValue = ghi vào ô ưu tiên 16,
+    và ô đó sẽ giữ giá trị cũ mãi (lần đặt sau client vẫn đọc số cũ, nhả lệnh rơi về số cũ)."""
     obj.relinquishDefault = _to_bacnet(kind, value)
-    if not any(_active(v) for v in (obj.priorityArray or [])):     # không ai đang ra lệnh: theo giá trị mặc định
-        obj.presentValue = obj.relinquishDefault
+    obj.recalculating()
+    state.set_from_device(key, _to_state(kind, obj.presentValue))   # đang có lệnh ưu tiên: báo đúng số thiết bị trả
 
 
-def _clear(obj, kind: str, value) -> None:
+def _clear(state, key: str, obj, kind: str, value) -> None:
     """Đặt lại simulator: xóa mọi lệnh trong mảng ưu tiên, như thiết bị vừa khởi động lại."""
     obj.priorityArray = PriorityArray([PriorityValue(null=()) for _ in range(16)], obj=obj)
-    obj.relinquishDefault = obj.presentValue = _to_bacnet(kind, value)
-
-
-def _active(slot) -> bool:
-    """Ô của mảng ưu tiên đang có lệnh (không phải Null)."""
-    if slot is None:
-        return False
-    return getattr(slot, "null", None) is None
+    _set_default(state, key, obj, kind, value)

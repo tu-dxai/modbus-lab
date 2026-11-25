@@ -4,3 +4,4 @@ pysnmp==7.1.32
 bacpypes3==0.0.110
 pyyaml>=6.0
 pytest>=8.0
+tomli>=2.0; python_version < "3.11"     # kiểm thử đọc cấu hình Telegraf (TOML); 3.11+ có sẵn tomllib

@@ -32,10 +32,10 @@ Kiểm tra:
     from trỏ tới nút có thật, không vòng, kind hợp lệ, device / meters / show trỏ tới thiết bị và điểm có thật, mỗi
     thiết bị nằm ở tối đa một nút, nút không gắn thiết bị phải có label; topology.cooling trỏ tới thiết bị và nút có thật
 """
-import re, sys
+import math, re, struct, sys
 from pathlib import Path
 import yaml
-from codec import SIZE
+from codec import SIZE, encode
 
 DEFAULT_PATH = "edge/point-map/devices.yml"
 DEFAULT_ENV = "lab"
@@ -266,7 +266,7 @@ def _check_writable(key: str, p: dict) -> list[str]:
         return [f"{key}: điểm ghi được nhưng thiếu allowed hoặc khoảng min/max"]
     if has_min != has_max:
         return [f"{key}: khoảng ghi cần đủ cả min và max (đang chỉ có {'min' if has_min else 'max'})"]
-    if p["min"] > p["max"]:
+    if _is_number(p["min"]) and _is_number(p["max"]) and p["min"] > p["max"]:
         return [f"{key}: min {p['min']} lớn hơn max {p['max']}"]
     return []
 
@@ -380,10 +380,56 @@ def protocol(d: dict) -> str:
     return d.get("protocol", "modbus")
 
 
+def _is_number(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
 def _check_point_common(key: str, p: dict) -> list[str]:
     errors = _check_bilingual(key, "label", p.get("label"))
     if "unit" not in p:
         errors.append(f"{key}: thiếu unit (dùng unit: \"\" nếu không có đơn vị)")
+    if "scale" in p and not (_is_number(p["scale"]) and p["scale"] != 0):
+        errors.append(f"{key}: scale {p['scale']!r} không hợp lệ (số khác 0; scale 0 làm mọi giá trị đọc ra 0)")
+    sim = p.get("sim", {})
+    if not isinstance(sim, dict):
+        errors.append(f"{key}: sim phải có dạng {{ base, noise }}")
+    else:
+        if "base" in sim and not _is_number(sim["base"]):
+            errors.append(f"{key}: sim.base {sim['base']!r} phải là số")
+        if "noise" in sim and not (_is_number(sim["noise"]) and sim["noise"] >= 0):
+            errors.append(f"{key}: sim.noise {sim['noise']!r} phải là số >= 0")
+    for f in ("min", "max"):
+        if f in p and not _is_number(p[f]):
+            errors.append(f"{key}: {f} {p[f]!r} phải là số")
+    if "allowed" in p and not (isinstance(p["allowed"], list) and all(_is_number(v) for v in p["allowed"])):
+        errors.append(f"{key}: allowed phải là danh sách số")
+    return errors
+
+
+def _modbus_fits(p: dict, d: dict, value) -> str | None:
+    """Giá trị có lưu đúng được vào thanh ghi của điểm không; trả về lý do nếu không."""
+    scale = p.get("scale", 1)
+    try:
+        encode(value, p["type"], d["byte_order"], scale)
+    except (struct.error, OverflowError, ValueError):
+        return f"không vừa kiểu {p['type']} với hệ số {scale}"
+    if p["type"] != "float32" and not math.isclose(value / scale, round(value / scale), rel_tol=0, abs_tol=1e-6):
+        return f"không phải bội số của hệ số {scale} (thiết bị sẽ làm tròn)"
+    return None
+
+
+def _check_modbus_values(key: str, d: dict, p: dict) -> list[str]:
+    """Giới hạn ghi và sim.base phải lưu đúng được vào thanh ghi; chỉ gọi khi type, byte_order, scale đã hợp lệ."""
+    errors = []
+    if p.get("writable") and p.get("table") == "input":
+        errors.append(f"{key}: input register chỉ đọc — bỏ writable, hoặc chuyển điểm sang table: holding")
+    values = [(f"allowed {v}", v) for v in p.get("allowed", [])] + [(f, p[f]) for f in ("min", "max") if f in p]
+    if "base" in p.get("sim", {}):
+        values.append(("sim.base", p["sim"]["base"]))
+    for what, v in values:
+        why = _modbus_fits(p, d, v)
+        if why:
+            errors.append(f"{key}: {what} {why}")
     return errors
 
 
@@ -406,6 +452,15 @@ def _check_modbus_points(dev: str, d: dict) -> list[str]:
         if missing or p["table"] not in TABLES or p["type"] not in SIZE:
             continue                                   # không biết chắc ô nào, bỏ qua kiểm tra đè
         start, size = p["address"], SIZE[p["type"]]
+        if not (_is_int(start) and 0 <= start and start + size - 1 <= 65535):
+            errors.append(f"{key}: address {start!r} không hợp lệ (số nguyên 0-{65536 - size} cho kiểu {p['type']})")
+            continue
+        scale_ok = "scale" not in p or (_is_number(p["scale"]) and p["scale"] != 0)
+        sim_ok = isinstance(p.get("sim", {}), dict) and all(_is_number(p["sim"][f]) for f in ("base",) if f in p.get("sim", {}))
+        limits_ok = all(_is_number(p[f]) for f in ("min", "max") if f in p) and (
+            "allowed" not in p or (isinstance(p["allowed"], list) and all(_is_number(v) for v in p["allowed"])))
+        if d.get("byte_order") in BYTE_ORDERS and scale_ok and sim_ok and limits_ok:
+            errors += _check_modbus_values(key, d, p)
         for o_start, o_size, o_key in used[p["table"]]:
             if start < o_start + o_size and o_start < start + size:
                 errors.append(f"{key} ({p['table']} {_span(start, size)}) đè lên "
@@ -590,6 +645,8 @@ def _check_bacnet(dev: str, d: dict) -> list[str]:
             errors.append(f"{key}: {obj[0]} không ghi được (chỉ {', '.join(BACNET_WRITABLE)}) — bỏ writable")
             continue
         errors += _check_writable(key, p)
+        if obj[0].startswith("binary") and ("min" in p or "max" in p):
+            errors.append(f"{key}: điểm binary dùng allowed: [0, 1], không dùng min/max (0.5 sẽ lọt rào chắn)")
         if not (_is_int(p.get("priority")) and 1 <= p["priority"] <= 16):
             errors.append(f"{key}: điểm BACnet ghi được cần priority 1-16 (thường 8); lệnh ghi luôn kèm mức ưu tiên")
         if obj[0].startswith("binary") and "allowed" in p and not set(p["allowed"]) <= {0, 1}:
